@@ -1,0 +1,25 @@
+{
+  "name": "Burnside & Vinery Inspector",
+  "short_name": "Inspect",
+  "description": "Field inspector tool for the Burnside & Vinery Road Allotment Society.",
+  "start_url": "/inspect/",
+  "scope": "/inspect/",
+  "display": "standalone",
+  "background_color": "#fdfcfb",
+  "theme_color": "#6b8e6f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

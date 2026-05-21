@@ -1,0 +1,132 @@
+/**
+ * Inspector PWA service worker.
+ *
+ * Pre-caches the app shell, CSS, JS modules and manifest on install. Runtime
+ * caches API responses (network-first with cache fallback) and map tiles
+ * (stale-while-revalidate, bounded). On navigation requests within
+ * /inspect/, falls back to the cached shell so the app boots offline.
+ */
+
+const VERSION = 'v1';
+const SHELL_CACHE = `ami-shell-${VERSION}`;
+const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
+const TILE_CACHE = `ami-tiles-${VERSION}`;
+
+const PLUGIN_BASE = new URL(self.location.href).pathname.replace(/service-worker\.js.*$/, ''); // .../public/
+
+// Pre-cache the app shell + critical static assets.
+const PRECACHE_URLS = [
+	'/inspect/',
+	`${PLUGIN_BASE}css/inspect.css`,
+	`${PLUGIN_BASE}js/app.js`,
+	`${PLUGIN_BASE}js/router.js`,
+	`${PLUGIN_BASE}js/components/header.js`,
+	`${PLUGIN_BASE}js/pages/round-picker.js`,
+	`${PLUGIN_BASE}js/pages/plot-picker.js`,
+	`${PLUGIN_BASE}js/pages/finding-editor.js`,
+	`${PLUGIN_BASE}js/services/api.js`,
+	`${PLUGIN_BASE}js/services/store.js`,
+	`${PLUGIN_BASE}js/services/sync.js`,
+	`${PLUGIN_BASE}manifest.webmanifest`,
+	`${PLUGIN_BASE}icons/icon-192.png`,
+	`${PLUGIN_BASE}icons/icon-512.png`,
+];
+
+self.addEventListener('install', (event) => {
+	event.waitUntil(
+		caches.open(SHELL_CACHE)
+			.then((cache) => cache.addAll(PRECACHE_URLS).catch((e) => {
+				// Don't fail install if a precache fetch fails — assets will still
+				// be fetched on first navigation.
+				console.warn('SW precache had errors', e);
+			}))
+			.then(() => self.skipWaiting())
+	);
+});
+
+self.addEventListener('activate', (event) => {
+	event.waitUntil(
+		caches.keys()
+			.then((keys) => Promise.all(keys
+				.filter((k) => k.startsWith('ami-') && !k.endsWith(VERSION))
+				.map((k) => caches.delete(k))
+			))
+			.then(() => self.clients.claim())
+	);
+});
+
+self.addEventListener('fetch', (event) => {
+	const req = event.request;
+	if (req.method !== 'GET') return;
+
+	const url = new URL(req.url);
+
+	// Navigation: always serve the cached shell so the app can boot offline,
+	// then router/client code re-fetches data.
+	if (req.mode === 'navigate' && url.pathname.startsWith('/inspect')) {
+		event.respondWith(
+			(async () => {
+				try {
+					const fresh = await fetch(req);
+					const cache = await caches.open(SHELL_CACHE);
+					cache.put('/inspect/', fresh.clone());
+					return fresh;
+				} catch {
+					const cached = await caches.match('/inspect/');
+					return cached || new Response('Offline', { status: 503, statusText: 'Offline' });
+				}
+			})()
+		);
+		return;
+	}
+
+	// admin-ajax.php — network-first with cache fallback for GETs only.
+	if (url.pathname.endsWith('/wp-admin/admin-ajax.php') && req.method === 'GET') {
+		event.respondWith(
+			(async () => {
+				try {
+					const fresh = await fetch(req);
+					const cache = await caches.open(RUNTIME_CACHE);
+					cache.put(req, fresh.clone());
+					return fresh;
+				} catch {
+					const cached = await caches.match(req);
+					return cached || new Response(JSON.stringify({ success: false, data: { message: 'Offline' } }), {
+						status: 503,
+						headers: { 'Content-Type': 'application/json' },
+					});
+				}
+			})()
+		);
+		return;
+	}
+
+	// Map tiles (Leaflet / OSM / Esri): stale-while-revalidate, bounded cache.
+	if (/(\.png|\.jpg|\.jpeg|\.webp)(\?|$)/.test(url.pathname) && /tile/i.test(url.hostname + url.pathname)) {
+		event.respondWith(
+			(async () => {
+				const cache = await caches.open(TILE_CACHE);
+				const cached = await cache.match(req);
+				const fetchPromise = fetch(req).then((res) => {
+					if (res.ok) cache.put(req, res.clone());
+					return res;
+				}).catch(() => cached);
+				return cached || fetchPromise;
+			})()
+		);
+		return;
+	}
+
+	// Plugin static assets: cache-first.
+	if (url.pathname.includes('/wp-content/plugins/allotment-manager-inspections/')) {
+		event.respondWith(
+			caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+				if (res.ok) {
+					caches.open(SHELL_CACHE).then((cache) => cache.put(req, res.clone()));
+				}
+				return res;
+			}))
+		);
+		return;
+	}
+});
