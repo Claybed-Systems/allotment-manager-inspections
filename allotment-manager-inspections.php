@@ -56,9 +56,69 @@ require_once AMI_PLUGIN_DIR . 'includes/class-capabilities.php';
 require_once AMI_PLUGIN_DIR . 'includes/class-route.php';
 require_once AMI_PLUGIN_DIR . 'includes/ajax/class-inspect-ajax.php';
 
+/**
+ * Minimum required base-plugin version.
+ */
+define( 'AMI_REQUIRED_AM_VERSION', '2.4.0' );
+
+/**
+ * Check whether the main Allotment Manager plugin is active and at the
+ * required minimum version. Without it, the inspector plugin's AJAX
+ * endpoints and routes can't function — they call into the main plugin's
+ * services + capabilities. Audit finding D (May 21 2026 audit).
+ *
+ * @return bool
+ */
+function is_base_plugin_active(): bool {
+	// Main plugin's Plugin class is only defined when the plugin is
+	// active and its autoloader is registered. Lightweight check —
+	// avoids loading wp-admin/includes/plugin.php for is_plugin_active().
+	if ( ! class_exists( 'AllotmentManager\\Plugin' ) ) {
+		return false;
+	}
+
+	if ( defined( 'AM_VERSION' ) ) {
+		return version_compare( AM_VERSION, AMI_REQUIRED_AM_VERSION, '>=' );
+	}
+
+	// AM_VERSION not yet defined (very early in plugins_loaded ordering)
+	// — assume compatible. Late requests will re-check.
+	return true;
+}
+
+/**
+ * Show an admin notice when the base plugin is missing.
+ */
+function base_plugin_required_notice(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	echo '<div class="notice notice-error"><p>';
+	printf(
+		/* translators: %s: minimum AM version */
+		esc_html__( 'Allotment Manager - Field Inspector requires the Allotment Manager plugin (version %s or higher) to be installed and activated.', 'allotment-manager-inspections' ),
+		esc_html( AMI_REQUIRED_AM_VERSION )
+	);
+	echo '</p></div>';
+}
+
+/**
+ * Boot the plugin if its base plugin is active. Wraps Plugin::instance so
+ * we can gate execution behind the base-plugin check — register_*_hook
+ * callbacks fire from the standalone bootstrap and don't need the gate.
+ */
+function init_plugin(): void {
+	if ( ! is_base_plugin_active() ) {
+		add_action( 'admin_notices', __NAMESPACE__ . '\\base_plugin_required_notice' );
+		return;
+	}
+	Plugin::instance();
+}
+
 // Activation / deactivation hooks: register/remove the capability.
 \register_activation_hook( __FILE__, [ Capabilities::class, 'on_activate' ] );
 \register_deactivation_hook( __FILE__, [ Capabilities::class, 'on_deactivate' ] );
 
-// Boot.
-\add_action( 'plugins_loaded', [ Plugin::class, 'instance' ] );
+// Boot. Run at priority 20 so the base plugin's plugins_loaded hook
+// (default priority 10) has already fired and registered its Plugin class.
+\add_action( 'plugins_loaded', __NAMESPACE__ . '\\init_plugin', 20 );
