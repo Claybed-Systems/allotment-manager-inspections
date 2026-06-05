@@ -56,6 +56,12 @@ export async function syncOnce() {
 					memberId: f.memberId,
 					rating:   f.rating,
 					notes:    f.notes,
+					// Issue tickboxes (DB 2.11.2). Older queued rows
+					// from before tickbox support don't carry the key
+					// — saveFinding handles `issues === undefined` by
+					// omitting the tickbox fields entirely (server
+					// records NULL = "not assessed").
+					issues:   f.issues,
 				});
 				const newFindingId = result && (result.finding_id || result.id);
 				if (newFindingId) {

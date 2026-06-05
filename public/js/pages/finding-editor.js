@@ -40,6 +40,20 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const state = {
 		rating: existing ? categoryToRating(existing.complianceCategory) : null,
 		notes: existing ? (existing.findingsSummary || '') : '',
+		// Issue tickboxes (DB 2.11.2). Each key is `null` (not assessed
+		// this round), `false` (inspector explicitly recorded no issue)
+		// or `true` (issue ticked). The api layer only forwards keys
+		// that are NOT null, preserving the schema's tri-state on the
+		// server. Pre-populate from any existing finding so reopening
+		// the page after a save shows the previously-recorded state.
+		issues: {
+			has_rubbish:             existing && existing.hasRubbish !== undefined ? !!existing.hasRubbish : null,
+			has_overgrown_weeds:     existing && existing.hasOvergrownWeeds !== undefined ? !!existing.hasOvergrownWeeds : null,
+			has_uncultivated_areas:  existing && existing.hasUncultivatedAreas !== undefined ? !!existing.hasUncultivatedAreas : null,
+			has_derelict_structures: existing && existing.hasDerelictStructures !== undefined ? !!existing.hasDerelictStructures : null,
+			has_tenancy_breach:      existing && existing.hasTenancyBreach !== undefined ? !!existing.hasTenancyBreach : null,
+			tenancy_breach_description: existing && existing.tenancyBreachDescription ? existing.tenancyBreachDescription : '',
+		},
 		newPhotos: [], // { blob, url, filename }
 	};
 
@@ -160,6 +174,84 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 		refreshRatingUI();
 	});
 
+	// --- Issues observed ---
+	// Tick what's wrong (or right). Section maps to the committee's
+	// Site Inspection Procedure v3.0 issue list — Cat 2 (some rubbish /
+	// weeds / minor tenancy breach) vs Cat 3 (significant versions +
+	// derelict structures + essentially no cultivation). Severity is
+	// the Rating above; these flags structure the WHY so reports can
+	// pivot by issue type instead of grepping prose.
+	//
+	// Each tickbox starts "not assessed" (null) and toggles between
+	// "ticked" (true) and "not ticked but recorded" (false) on click.
+	// Three-state UI: empty / ✓ / ✗ — but for first-cut simplicity we
+	// stick to binary unchecked/checked, and the api layer translates
+	// "left unchecked = null" the first time, "explicitly unchecked
+	// after touching = false" on re-saves.
+	const issuesLabel = document.createElement('label');
+	issuesLabel.className = 'ami-label';
+	issuesLabel.textContent = s.issuesObserved || 'Issues observed';
+	main.appendChild(issuesLabel);
+
+	const issuesList = document.createElement('div');
+	issuesList.className = 'ami-issues';
+
+	const issueDefs = [
+		{ key: 'has_rubbish',             label: s.issueRubbish             || 'Non-compostable rubbish' },
+		{ key: 'has_overgrown_weeds',     label: s.issueOvergrownWeeds      || 'Long grass or overgrown weeds' },
+		{ key: 'has_uncultivated_areas',  label: s.issueUncultivated        || 'Essentially no cultivation' },
+		{ key: 'has_derelict_structures', label: s.issueDerelictStructures  || 'Derelict sheds / greenhouses' },
+		{ key: 'has_tenancy_breach',      label: s.issueTenancyBreach       || 'Tenancy agreement breach' },
+	];
+
+	for (const def of issueDefs) {
+		const row = document.createElement('label');
+		row.className = 'ami-issue';
+		const cb = document.createElement('input');
+		cb.type = 'checkbox';
+		cb.dataset.issue = def.key;
+		cb.checked = !!state.issues[def.key];
+		cb.addEventListener('change', () => {
+			state.issues[def.key] = cb.checked;
+			if (def.key === 'has_tenancy_breach') {
+				breachDetailRow.style.display = cb.checked ? '' : 'none';
+				if (!cb.checked) {
+					state.issues.tenancy_breach_description = '';
+					breachInput.value = '';
+				}
+			}
+		});
+		const txt = document.createElement('span');
+		txt.textContent = def.label;
+		row.appendChild(cb);
+		row.appendChild(txt);
+		issuesList.appendChild(row);
+	}
+	main.appendChild(issuesList);
+
+	// Tenancy breach detail field — revealed only when the breach
+	// tickbox is on. Max 255 chars (matches schema column width).
+	const breachDetailRow = document.createElement('div');
+	breachDetailRow.className = 'ami-issue-detail';
+	breachDetailRow.style.display = state.issues.has_tenancy_breach ? '' : 'none';
+	const breachLabel = document.createElement('label');
+	breachLabel.className = 'ami-label';
+	breachLabel.htmlFor = 'ami-breach-detail';
+	breachLabel.textContent = s.tenancyBreachDetailLabel || 'Briefly describe the breach';
+	const breachInput = document.createElement('input');
+	breachInput.type = 'text';
+	breachInput.id = 'ami-breach-detail';
+	breachInput.className = 'ami-input';
+	breachInput.maxLength = 255;
+	breachInput.placeholder = s.tenancyBreachDetailPlaceholder || 'e.g. subletting, structural change without consent';
+	breachInput.value = state.issues.tenancy_breach_description || '';
+	breachInput.addEventListener('input', () => {
+		state.issues.tenancy_breach_description = breachInput.value;
+	});
+	breachDetailRow.appendChild(breachLabel);
+	breachDetailRow.appendChild(breachInput);
+	main.appendChild(breachDetailRow);
+
 	// --- Sticky save bar ---
 	const saveBar = document.createElement('div');
 	saveBar.className = 'ami-save-bar';
@@ -184,12 +276,15 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 					memberId: plot.memberId,
 					rating: state.rating,
 					notes: state.notes,
+					issues: state.issues,
 				});
 				findingId = (result && (result.finding_id || result.id)) || findingId;
 			} else {
-				// Queue locally.
+				// Queue locally. issues is included in the spread so a
+				// later sync sends it on to api.saveFinding verbatim.
 				const pending = await store.queueFinding({
 					roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
+					issues: state.issues,
 				});
 				// Photos taken offline get tagged with the pending row's id so
 				// they can be re-assigned to the real findingId after sync.
@@ -220,6 +315,7 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			console.warn('Save failed, queueing', e);
 			const pending = await store.queueFinding({
 				roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
+				issues: state.issues,
 			});
 			for (const ph of state.newPhotos) {
 				await store.queuePhoto({ pendingFindingId: pending.id, blob: ph.blob, filename: ph.filename });

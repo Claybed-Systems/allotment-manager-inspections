@@ -98,6 +98,19 @@ final class Plugin {
 				'tenant'        => \__( 'Tenant', 'allotment-manager-inspections' ),
 				'plot'          => \__( 'Plot', 'allotment-manager-inspections' ),
 				'progress'      => \__( '%d of %d inspected', 'allotment-manager-inspections' ),
+				// Issue tickbox labels (Site Inspection Procedure v3.0).
+				// Inspectors tick what's wrong; severity (Cat 2 minor / Cat 3
+				// significant) is set via the rating above. Severity-implied
+				// items (uncultivated, derelict) are labelled to make their
+				// Cat 3 implication clear.
+				'issuesObserved'                  => \__( 'Issues observed', 'allotment-manager-inspections' ),
+				'issueRubbish'                    => \__( 'Non-compostable rubbish', 'allotment-manager-inspections' ),
+				'issueOvergrownWeeds'             => \__( 'Long grass or overgrown weeds', 'allotment-manager-inspections' ),
+				'issueUncultivated'               => \__( 'Essentially no cultivation', 'allotment-manager-inspections' ),
+				'issueDerelictStructures'         => \__( 'Derelict sheds or greenhouses', 'allotment-manager-inspections' ),
+				'issueTenancyBreach'              => \__( 'Tenancy agreement breach', 'allotment-manager-inspections' ),
+				'tenancyBreachDetailLabel'        => \__( 'Briefly describe the breach', 'allotment-manager-inspections' ),
+				'tenancyBreachDetailPlaceholder'  => \__( 'e.g. subletting, structural change without consent', 'allotment-manager-inspections' ),
 			],
 		];
 	}

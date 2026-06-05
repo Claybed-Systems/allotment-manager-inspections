@@ -268,7 +268,10 @@ final class Inspect_Ajax {
 
 		$finding = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id, compliance_category, compliance_status, findings_summary, requires_followup
+				"SELECT
+					id, compliance_category, compliance_status, findings_summary, requires_followup,
+					has_rubbish, has_overgrown_weeds, has_uncultivated_areas,
+					has_derelict_structures, has_tenancy_breach, tenancy_breach_description
 				FROM {$findings_table}
 				WHERE plot_id = %d AND round_id = %d
 				LIMIT 1",
@@ -320,6 +323,18 @@ final class Inspect_Ajax {
 					'complianceStatus'   => $finding->compliance_status,
 					'findingsSummary'    => $finding->findings_summary,
 					'requiresFollowup'   => (bool) $finding->requires_followup,
+					// Issue-tickbox columns (DB 2.11.2). Null = inspector
+					// didn't assess this aspect; 0/false = explicitly
+					// recorded "no issue present"; 1/true = ticked.
+					// Cast preserves the tri-state: null stays null, the
+					// rest become bool — the finding-editor pre-populates
+					// from `hasX !== undefined ? !!hasX : null`.
+					'hasRubbish'              => null === $finding->has_rubbish              ? null : (bool) $finding->has_rubbish,
+					'hasOvergrownWeeds'       => null === $finding->has_overgrown_weeds      ? null : (bool) $finding->has_overgrown_weeds,
+					'hasUncultivatedAreas'    => null === $finding->has_uncultivated_areas   ? null : (bool) $finding->has_uncultivated_areas,
+					'hasDerelictStructures'   => null === $finding->has_derelict_structures  ? null : (bool) $finding->has_derelict_structures,
+					'hasTenancyBreach'        => null === $finding->has_tenancy_breach       ? null : (bool) $finding->has_tenancy_breach,
+					'tenancyBreachDescription' => $finding->tenancy_breach_description,
 				] : null,
 				'photos'  => $photos,
 			]

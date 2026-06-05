@@ -7,7 +7,11 @@
  * /inspect/, falls back to the cached shell so the app boots offline.
  */
 
-const VERSION = 'v1';
+// Bump on any shipped JS/CSS/HTML change so already-installed PWAs
+// evict their pre-cached shell and pick up the new bytes on next load.
+// 'v2' adds the issue-tickbox UI (finding-editor) + the api/sync/store
+// pass-through for the 2.11.2 fields.
+const VERSION = 'v2';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

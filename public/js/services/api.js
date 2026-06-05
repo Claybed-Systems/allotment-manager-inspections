@@ -79,8 +79,27 @@ export const getPlot = (roundId, plotId) => ajaxGet('am_inspect_get_plot', { rou
  * Save a finding. Uses the existing am_inspection_record_finding endpoint
  * registered by the main allotment-manager plugin. Maps the inspector's
  * 1/2/3 rating to the schema's compliance_category enum + status.
+ *
+ * Issue tickboxes (DB 2.11.2) are forwarded when supplied. The main
+ * plugin's AJAX handler uses isset($_POST[$key]) to distinguish "ticked"
+ * (= present, false or true) from "not assessed" (= absent from payload);
+ * we mirror that by only appending the keys that the caller actually
+ * carries on the `issues` object. Callers that don't supply `issues`
+ * (legacy / queued findings created before this addition) round-trip as
+ * NULL on those columns, exactly as before.
+ *
+ * @param {Object} args
+ * @param {number} args.roundId
+ * @param {number} args.plotId
+ * @param {number} args.memberId
+ * @param {1|2|3}  args.rating
+ * @param {string} args.notes
+ * @param {Object} [args.issues] Tickbox state. Any subset of:
+ *   has_rubbish, has_overgrown_weeds, has_uncultivated_areas,
+ *   has_derelict_structures, has_tenancy_breach (boolean) +
+ *   tenancy_breach_description (string, only sent when truthy).
  */
-export async function saveFinding({ roundId, plotId, memberId, rating, notes }) {
+export async function saveFinding({ roundId, plotId, memberId, rating, notes, issues }) {
 	const ratingMap = {
 		1: { category: 'category_1', status: 'compliant',     requiresFollowup: 0 },
 		2: { category: 'category_2', status: 'non_compliant', requiresFollowup: 1 },
@@ -91,7 +110,7 @@ export async function saveFinding({ roundId, plotId, memberId, rating, notes }) 
 
 	const today = new Date().toISOString().slice(0, 10);
 
-	return ajaxPost('am_inspection_record_finding', {
+	const payload = {
 		round_id:             roundId,
 		plot_id:              plotId,
 		member_id:            memberId,
@@ -100,7 +119,30 @@ export async function saveFinding({ roundId, plotId, memberId, rating, notes }) 
 		compliance_status:    m.status,
 		findings_summary:     notes || '',
 		requires_followup:    m.requiresFollowup,
-	}, 'recordFinding');
+	};
+
+	if (issues && typeof issues === 'object') {
+		const booleanKeys = [
+			'has_rubbish',
+			'has_overgrown_weeds',
+			'has_uncultivated_areas',
+			'has_derelict_structures',
+			'has_tenancy_breach',
+		];
+		for (const k of booleanKeys) {
+			if (Object.prototype.hasOwnProperty.call(issues, k)) {
+				// Only append the key when the caller actively recorded
+				// the boolean — preserves the NULL = "not assessed"
+				// semantic on the server side.
+				payload[k] = issues[k] ? 1 : 0;
+			}
+		}
+		if (issues.tenancy_breach_description) {
+			payload.tenancy_breach_description = issues.tenancy_breach_description;
+		}
+	}
+
+	return ajaxPost('am_inspection_record_finding', payload, 'recordFinding');
 }
 
 /**

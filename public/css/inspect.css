@@ -448,6 +448,58 @@ body {
 .ami-rating__btn--selected.ami-rating__btn--2 { background: var(--ami-accent);    color: #3d3428; }
 .ami-rating__btn--selected.ami-rating__btn--3 { background: var(--ami-secondary); color: #fff; }
 
+/* Issues observed — tickbox list under the rating */
+.ami-issues {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 16px;
+}
+
+.ami-issue {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	background: var(--ami-card);
+	border: 1px solid var(--ami-border);
+	border-radius: var(--ami-radius);
+	cursor: pointer;
+	min-height: 48px; /* tap-friendly on touch */
+	font-size: 15px;
+}
+
+.ami-issue input[type="checkbox"] {
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+	accent-color: var(--ami-secondary);
+	margin: 0;
+}
+
+.ami-issue-detail {
+	margin-bottom: 16px;
+}
+
+.ami-input {
+	width: 100%;
+	min-height: 48px;
+	padding: 12px 14px;
+	border: 1px solid var(--ami-border);
+	border-radius: var(--ami-radius);
+	background: var(--ami-card);
+	font-family: inherit;
+	font-size: 15px;
+	color: inherit;
+	box-sizing: border-box;
+}
+
+.ami-input:focus {
+	outline: none;
+	border-color: var(--ami-primary);
+	box-shadow: 0 0 0 3px rgba(106, 142, 110, 0.18);
+}
+
 /* Sticky save button */
 .ami-save-bar {
 	position: fixed;
