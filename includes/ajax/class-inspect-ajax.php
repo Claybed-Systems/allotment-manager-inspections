@@ -123,7 +123,7 @@ final class Inspect_Ajax {
 		global $wpdb;
 		$rounds_table   = $wpdb->prefix . 'am_inspection_rounds';
 		$plots_table    = $wpdb->prefix . 'am_plots';
-		$members_table  = $wpdb->prefix . 'am_members';
+		$members_table  = $wpdb->prefix . 'mm_members';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
 
 		// Load round meta.
@@ -241,7 +241,7 @@ final class Inspect_Ajax {
 
 		global $wpdb;
 		$plots_table    = $wpdb->prefix . 'am_plots';
-		$members_table  = $wpdb->prefix . 'am_members';
+		$members_table  = $wpdb->prefix . 'mm_members';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
 		$photos_table   = $wpdb->prefix . 'am_inspection_photos';
 
