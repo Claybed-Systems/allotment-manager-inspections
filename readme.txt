@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.1 =
+* Internal: code-review hardening on the new save endpoint (exception-safe filter cleanup; removed an unused security token).
 
 = 1.2.0 =
 * Fix: recorded findings now actually save to the server (they were only ever queued). The app posts to its own save endpoint instead of the committee admin form's, which had a mismatched security token and required fields the phone doesn't capture. Field findings record the logged-in inspector.
