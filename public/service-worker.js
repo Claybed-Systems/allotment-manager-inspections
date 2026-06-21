@@ -13,7 +13,8 @@
 // pass-through for the 2.11.2 fields.
 // 'v3' adds the plot Map view (plot-map.js) + the bundled Leaflet library,
 // precached so the map works offline.
-const VERSION = 'v3';
+// 'v4' adds the shared badge component (js/components/badge.js).
+const VERSION = 'v4';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
@@ -27,6 +28,7 @@ const PRECACHE_URLS = [
 	`${PLUGIN_BASE}js/app.js`,
 	`${PLUGIN_BASE}js/router.js`,
 	`${PLUGIN_BASE}js/components/header.js`,
+	`${PLUGIN_BASE}js/components/badge.js`,
 	`${PLUGIN_BASE}js/pages/round-picker.js`,
 	`${PLUGIN_BASE}js/pages/plot-picker.js`,
 	`${PLUGIN_BASE}js/pages/plot-map.js`,

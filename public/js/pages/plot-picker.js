@@ -12,6 +12,7 @@
 
 import * as api from '../services/api.js';
 import { renderHeader } from '../components/header.js';
+import { badgeMeta } from '../components/badge.js';
 
 const s = window.amiData.strings;
 
@@ -157,14 +158,8 @@ export async function render({ roundId }, { mount, navigate }) {
 }
 
 function badge(category) {
-	if (!category) return `<span class="ami-badge ami-badge--none">${s.notInspected}</span>`;
-	const map = {
-		category_1: ['ami-badge--cat1', s.cat1],
-		category_2: ['ami-badge--cat2', s.cat2],
-		category_3: ['ami-badge--cat3', s.cat3],
-	};
-	const m = map[category] || ['ami-badge--none', category];
-	return `<span class="ami-badge ${m[0]}">${m[1]}</span>`;
+	const [cls, label] = badgeMeta(category, s);
+	return `<span class="ami-badge ${cls}">${label}</span>`;
 }
 
 function escapeHtml(str) {

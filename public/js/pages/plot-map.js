@@ -16,6 +16,8 @@
  * the user toggles back to the List.
  */
 
+import { badgeMeta } from '../components/badge.js';
+
 // Circle-marker styling per compliance category. Hexes mirror the .ami-badge
 // rules in inspect.css so the map and the list agree at a glance.
 const MARKER_STYLE = {
@@ -81,15 +83,10 @@ function styleFor(category) {
  * Build the badge element for a category, reusing the existing .ami-badge CSS.
  */
 function badgeEl(category, strings) {
-	const map = {
-		category_1: ['ami-badge--cat1', strings.cat1],
-		category_2: ['ami-badge--cat2', strings.cat2],
-		category_3: ['ami-badge--cat3', strings.cat3],
-	};
-	const m = map[category] || ['ami-badge--none', strings.notInspected];
+	const [cls, label] = badgeMeta(category, strings);
 	const span = document.createElement('span');
-	span.className = 'ami-badge ' + m[0];
-	span.textContent = m[1];
+	span.className = 'ami-badge ' + cls;
+	span.textContent = label;
 	return span;
 }
 
@@ -182,10 +179,15 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 	const s = strings || {};
 	let map = null;
 	let destroyed = false;
+	let invalidateTimer = null;
 
 	const handle = {
 		destroy() {
 			destroyed = true;
+			if (invalidateTimer) {
+				clearTimeout(invalidateTimer);
+				invalidateTimer = null;
+			}
 			if (map) {
 				map.remove();
 				map = null;
@@ -263,8 +265,10 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 	map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 19 });
 
 	// The tab content is swapped in synchronously; nudge Leaflet once layout
-	// settles so tiles fill the container.
-	setTimeout(() => {
+	// settles so tiles fill the container. Tracked so destroy() can cancel it
+	// if the user toggles back to List before it fires.
+	invalidateTimer = setTimeout(() => {
+		invalidateTimer = null;
 		if (map) {
 			map.invalidateSize();
 		}
