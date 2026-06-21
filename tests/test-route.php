@@ -81,6 +81,10 @@ class Test_Inspect_Ajax extends WP_UnitTestCase {
 			has_action( 'wp_ajax_am_inspect_get_plot' ),
 			'AJAX hook am_inspect_get_plot must be registered'
 		);
+		$this->assertNotFalse(
+			has_action( 'wp_ajax_am_inspect_save_finding' ),
+			'AJAX hook am_inspect_save_finding must be registered (the field-save endpoint)'
+		);
 	}
 }
 

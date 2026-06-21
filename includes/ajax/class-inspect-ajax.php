@@ -2,14 +2,18 @@
 /**
  * AJAX endpoints for the field inspector PWA.
  *
- * Three read-only endpoints that surface the data the SPA needs:
+ * Read-only endpoints that surface the data the SPA needs:
  *   - am_inspect_list_rounds — active rounds the inspector can work on
  *   - am_inspect_list_plots  — plots in scope for a given round
  *   - am_inspect_get_plot    — single plot detail + current finding (if any)
  *
- * The mutating endpoints (save finding, upload photo) are the existing
- * `am_inspection_record_finding` and `am_inspection_upload_photo` in the
- * main plugin — we do not duplicate them here.
+ * Plus one mutating endpoint:
+ *   - am_inspect_save_finding — records a finding via the main plugin's
+ *     Inspection_Finding model, single-inspector (field-PWA flow). It exists
+ *     because the committee admin form's `am_inspection_record_finding`
+ *     endpoint has a different nonce action + required fields, so the PWA
+ *     could never post to it. Photo upload still uses the main plugin's
+ *     `am_inspection_upload_photo` (its nonce action matches).
  *
  * @package AllotmentManagerInspections
  */
@@ -32,6 +36,7 @@ final class Inspect_Ajax {
 		\add_action( 'wp_ajax_am_inspect_list_rounds', [ self::class, 'list_rounds' ] );
 		\add_action( 'wp_ajax_am_inspect_list_plots', [ self::class, 'list_plots' ] );
 		\add_action( 'wp_ajax_am_inspect_get_plot', [ self::class, 'get_plot' ] );
+		\add_action( 'wp_ajax_am_inspect_save_finding', [ self::class, 'save_finding' ] );
 	}
 
 	/**
@@ -47,6 +52,84 @@ final class Inspect_Ajax {
 		if ( ! \current_user_can( AMI_CAPABILITY ) ) {
 			\wp_send_json_error( [ 'message' => \__( 'You do not have inspector permissions.', 'allotment-manager-inspections' ) ], 403 );
 		}
+	}
+
+	/**
+	 * POST action=am_inspect_save_finding
+	 *
+	 * Records a finding from the field PWA. The inspector's rating has already
+	 * been translated client-side to a compliance category + status; we map it
+	 * straight onto the main plugin's Inspection_Finding model, recording the
+	 * LOGGED-IN user as the sole inspector. The committee's 2-inspector minimum
+	 * is relaxed for this single-phone field flow via the
+	 * `am_inspection_min_inspectors` filter.
+	 *
+	 * This replaces the old cross-plugin POST to `am_inspection_record_finding`
+	 * (the committee admin form's endpoint), whose nonce action and required
+	 * fields never matched what the PWA sends — so field findings never synced.
+	 *
+	 * @return void
+	 */
+	public static function save_finding(): void {
+		self::authorise();
+
+		$round_id  = isset( $_POST['round_id'] ) ? (int) $_POST['round_id'] : 0;
+		$plot_id   = isset( $_POST['plot_id'] ) ? (int) $_POST['plot_id'] : 0;
+		$member_id = isset( $_POST['member_id'] ) ? (int) $_POST['member_id'] : 0;
+		if ( $round_id <= 0 || $plot_id <= 0 ) {
+			\wp_send_json_error( [ 'message' => \__( 'Missing round or plot.', 'allotment-manager-inspections' ) ], 400 );
+		}
+
+		if ( ! \class_exists( '\AllotmentManager\Inspections\Inspection_Finding' ) ) {
+			\wp_send_json_error( [ 'message' => \__( 'Inspections module unavailable.', 'allotment-manager-inspections' ) ], 500 );
+		}
+
+		$category = isset( $_POST['compliance_category'] ) ? \sanitize_key( $_POST['compliance_category'] ) : '';
+		$status   = isset( $_POST['compliance_status'] ) ? \sanitize_key( $_POST['compliance_status'] ) : '';
+		$notes    = isset( $_POST['findings_summary'] ) ? \sanitize_textarea_field( \wp_unslash( $_POST['findings_summary'] ) ) : '';
+		$date     = ( isset( $_POST['inspection_date'] ) && \preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $_POST['inspection_date'] ) )
+			? (string) $_POST['inspection_date']
+			: \current_time( 'Y-m-d' );
+
+		$data = [
+			'round_id'            => $round_id,
+			'plot_id'             => $plot_id,
+			'member_id'           => $member_id,
+			'inspection_date'     => $date,
+			'compliance_status'   => $status,
+			'compliance_category' => '' !== $category ? $category : null,
+			'findings_summary'    => $notes,
+			// Single field inspector = the logged-in user.
+			'inspector_user_ids'  => [ \get_current_user_id() ],
+		];
+
+		// Issue tickboxes — forward only keys actually sent so the schema's
+		// tri-state (NULL = "not assessed") is preserved when a key is omitted.
+		foreach ( [ 'has_rubbish', 'has_overgrown_weeds', 'has_uncultivated_areas', 'has_derelict_structures', 'has_tenancy_breach' ] as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$data[ $key ] = ! empty( $_POST[ $key ] ) ? 1 : 0;
+			}
+		}
+		if ( ! empty( $_POST['tenancy_breach_description'] ) ) {
+			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
+		}
+
+		// Relax the committee's 2-inspector minimum for this single-phone call,
+		// then create via the main plugin's model (keeps its validation, the
+		// UNIQUE round_plot guard, exemption + multi-plot logic, etc.).
+		$relax = static fn() => 1;
+		\add_filter( 'am_inspection_min_inspectors', $relax );
+		$result = \AllotmentManager\Inspections\Inspection_Finding::create_finding( $data );
+		\remove_filter( 'am_inspection_min_inspectors', $relax );
+
+		if ( \is_wp_error( $result ) ) {
+			\wp_send_json_error(
+				[ 'message' => $result->get_error_message(), 'code' => $result->get_error_code() ],
+				400
+			);
+		}
+
+		\wp_send_json_success( [ 'finding_id' => (int) $result, 'id' => (int) $result ] );
 	}
 
 	/**

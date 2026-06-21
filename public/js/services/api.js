@@ -142,7 +142,11 @@ export async function saveFinding({ roundId, plotId, memberId, rating, notes, is
 		}
 	}
 
-	return ajaxPost('am_inspection_record_finding', payload, 'recordFinding');
+	// Post to the inspections plugin's own save endpoint (am_inspect_save_finding)
+	// with the inspect nonce. The old target (the committee admin form's
+	// am_inspection_record_finding) used a different nonce action + required
+	// fields, so this POST always failed and findings only ever queued.
+	return ajaxPost('am_inspect_save_finding', payload, 'inspect');
 }
 
 /**
