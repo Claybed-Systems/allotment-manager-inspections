@@ -41,4 +41,20 @@ if ('serviceWorker' in navigator) {
 	navigator.serviceWorker.register(swUrl, { scope: '/inspect/' })
 		.then(() => console.info('Inspector SW registered'))
 		.catch((err) => console.warn('Inspector SW failed to register (PWA may not work offline)', err));
+
+	// Auto-apply updates. Our SW calls skipWaiting + clients.claim on install, so
+	// after a deploy a newly-installed worker takes control of this page and
+	// fires `controllerchange`. Reload once then, so the page runs the freshly
+	// precached code instead of the stale in-memory modules — otherwise picking
+	// up an update needs TWO manual reloads. Guarded to the update case (a
+	// controller already existed) so a first-time install doesn't reload, and to
+	// fire once.
+	if (navigator.serviceWorker.controller) {
+		let refreshing = false;
+		navigator.serviceWorker.addEventListener('controllerchange', () => {
+			if (refreshing) return;
+			refreshing = true;
+			window.location.reload();
+		});
+	}
 }
