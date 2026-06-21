@@ -3,7 +3,7 @@
  * Plugin Name: Allotment Manager - Field Inspector
  * Plugin URI: https://github.com/juettemann/allotment-manager-inspections
  * Description: Mobile-first PWA for committee members to record plot inspections in the field. Depends on the main Allotment Manager plugin for data, AJAX handlers and Google Drive photo storage.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Thomas Juettemann
  * Author URI: https://juettemann.co.uk
  * License: GPL v2 or later
@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Plugin version.
  */
-define( 'AMI_VERSION', '1.1.0' );
+define( 'AMI_VERSION', '1.1.1' );
 
 /**
  * Plugin directory path.
@@ -48,8 +48,14 @@ define( 'AMI_CAPABILITY', 'am_field_inspector' );
 /**
  * Capability set version. Bump when the set of granted caps changes; the
  * activation re-sync runs whenever the stored version differs.
+ *
+ * v2: re-grant am_field_inspector to the committee roles (am_site_chair,
+ * am_site_secretary, am_site_manager, am_committee, am_it_admin). On the
+ * existing installs these roles were created by the main plugin AFTER the
+ * inspector was first activated, so the original v1 sync — which skips
+ * roles that don't exist yet — only ever reached `administrator`.
  */
-define( 'AMI_CAPS_VERSION', '1' );
+define( 'AMI_CAPS_VERSION', '2' );
 
 require_once AMI_PLUGIN_DIR . 'includes/class-plugin.php';
 require_once AMI_PLUGIN_DIR . 'includes/class-capabilities.php';
