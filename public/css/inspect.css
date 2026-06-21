@@ -309,11 +309,64 @@ body {
 /* ===== Map view ===== */
 .ami-map {
 	width: 100%;
-	height: calc(100dvh - 200px);
+	height: calc(100dvh - 240px);
 	min-height: 360px;
 	border-radius: var(--ami-radius);
 	border: 1px solid var(--ami-border);
 	background: var(--ami-muted);
+	overflow: hidden;       /* clip square tiles to the rounded corners */
+	position: relative;
+	z-index: 0;             /* confine Leaflet's pane z-indexes (sticky header guard) */
+}
+
+/* Legend: colour key under the map. */
+.ami-map-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin-top: 10px;
+	font-size: 13px;
+	color: var(--ami-fg-soft);
+}
+.ami-map-legend__item {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.ami-map-legend__dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	border: 2px solid;
+	flex-shrink: 0;
+}
+
+/* Marker popup: plot number, tenant, status badge, Inspect button. */
+.ami-map-popup {
+	min-width: 150px;
+	text-align: center;
+}
+.ami-map-popup__num {
+	font-size: 17px;
+	font-weight: 700;
+	color: var(--ami-primary);
+}
+.ami-map-popup__name {
+	font-size: 14px;
+	color: var(--ami-fg);
+	margin-top: 2px;
+}
+.ami-map-popup__name.is-empty {
+	color: var(--ami-fg-soft);
+	font-style: italic;
+}
+.ami-map-popup__status {
+	margin-top: 8px;
+}
+.ami-map-popup__btn.ami-btn {
+	margin-top: 10px;
+	min-height: 40px;
+	font-size: 15px;
 }
 
 /* ===== Finding editor ===== */

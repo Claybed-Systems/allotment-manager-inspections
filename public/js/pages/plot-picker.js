@@ -69,7 +69,21 @@ export async function render({ roundId }, { mount, navigate }) {
 	const viewport = document.createElement('div');
 	main.appendChild(viewport);
 
+	// Map lifecycle: tear the Leaflet instance down whenever we leave the Map
+	// tab, and invalidate an in-flight async map render by bumping the token —
+	// so a slow Leaflet load can't clobber the List after the user toggles.
+	let mapHandle = null;
+	let mapToken = 0;
+	function teardownMap() {
+		if (mapHandle) {
+			mapHandle.destroy();
+			mapHandle = null;
+		}
+	}
+
 	function renderList() {
+		teardownMap();
+		mapToken++;
 		viewport.innerHTML = '';
 		if (!plots.length) {
 			viewport.innerHTML = `<div class="ami-empty">${
@@ -96,13 +110,40 @@ export async function render({ roundId }, { mount, navigate }) {
 		}
 	}
 
-	function renderMap() {
-		viewport.innerHTML = `
-			<div class="ami-empty">
-				<p><strong>Map view coming soon.</strong></p>
-				<p>The plot polygons need to be set up in the admin's <em>Map Editor</em> before the map can render them. For now, use the list view.</p>
-			</div>
-		`;
+	async function renderMap() {
+		teardownMap();
+		const token = ++mapToken;
+		viewport.innerHTML = '';
+		const host = document.createElement('div');
+		viewport.appendChild(host);
+
+		let handle;
+		try {
+			const mod = await import('./plot-map.js');
+			if (token !== mapToken) return; // toggled away while importing
+			handle = await mod.renderPlotMap(host, {
+				round,
+				plots,
+				tile: (data.map || {}).tile,
+				navigate,
+				strings: s,
+			});
+		} catch (err) {
+			if (token === mapToken) {
+				host.innerHTML = '';
+				const box = document.createElement('div');
+				box.className = 'ami-error';
+				box.textContent = (err && err.message) || 'Could not load the map.';
+				host.appendChild(box);
+			}
+			return;
+		}
+
+		if (token !== mapToken) {
+			handle.destroy(); // toggled away while rendering
+			return;
+		}
+		mapHandle = handle;
 	}
 
 	tabs.addEventListener('click', (e) => {

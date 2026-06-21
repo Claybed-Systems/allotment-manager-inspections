@@ -125,6 +125,7 @@ final class Inspect_Ajax {
 		$plots_table    = $wpdb->prefix . 'am_plots';
 		$members_table  = $wpdb->prefix . 'mm_members';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
+		$map_obj_table  = $wpdb->prefix . 'am_map_objects';
 
 		// Load round meta.
 		$round = $wpdb->get_row(
@@ -146,12 +147,15 @@ final class Inspect_Ajax {
 					p.current_member_id,
 					m.first_name,
 					m.last_name,
+					mo.latitude,
+					mo.longitude,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					prev.compliance_category AS previous_category
 				FROM {$findings_table} prev
 				INNER JOIN {$plots_table} p ON p.id = prev.plot_id
 				LEFT JOIN {$members_table} m ON m.id = p.current_member_id
+				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE prev.round_id = %d
 				  AND prev.compliance_category IN ('category_2', 'category_3')
@@ -169,11 +173,14 @@ final class Inspect_Ajax {
 					p.current_member_id,
 					m.first_name,
 					m.last_name,
+					mo.latitude,
+					mo.longitude,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					NULL AS previous_category
 				FROM {$plots_table} p
 				LEFT JOIN {$members_table} m ON m.id = p.current_member_id
+				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE p.section = %s
 				  AND (p.deleted_at IS NULL)
@@ -187,25 +194,9 @@ final class Inspect_Ajax {
 		$rows = $wpdb->get_results( $sql );
 		// phpcs:enable
 
-		$plots = array_map(
-			static function ( $row ) {
-				$first = trim( (string) ( $row->first_name ?? '' ) );
-				$last  = trim( (string) ( $row->last_name ?? '' ) );
-				$name  = trim( $first . ' ' . $last );
+		$plots = array_map( [ self::class, 'format_plot_row' ], $rows ?: [] );
 
-				return [
-					'id'                => (int) $row->id,
-					'plotNumber'        => $row->plot_number,
-					'section'           => $row->section,
-					'memberId'          => $row->current_member_id ? (int) $row->current_member_id : null,
-					'tenantName'        => '' !== $name ? $name : null,
-					'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
-					'currentCategory'   => $row->current_category,   // category_1|2|3 or null
-					'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
-				];
-			},
-			$rows ?: []
-		);
+		$tile = self::tile_config();
 
 		\wp_send_json_success(
 			[
@@ -218,6 +209,55 @@ final class Inspect_Ajax {
 					'status'         => $round->status,
 				],
 				'plots' => $plots,
+				'map'   => [ 'tile' => $tile ],
+			]
+		);
+	}
+
+	/**
+	 * Map a plots query row to the SPA's plot shape, including the map centroid.
+	 *
+	 * @param object $row Row from the list_plots query.
+	 * @return array<string,mixed>
+	 */
+	private static function format_plot_row( $row ): array {
+		$first = trim( (string) ( $row->first_name ?? '' ) );
+		$last  = trim( (string) ( $row->last_name ?? '' ) );
+		$name  = trim( $first . ' ' . $last );
+
+		return [
+			'id'                => (int) $row->id,
+			'plotNumber'        => $row->plot_number,
+			'section'           => $row->section,
+			'memberId'          => $row->current_member_id ? (int) $row->current_member_id : null,
+			'tenantName'        => '' !== $name ? $name : null,
+			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
+			'currentCategory'   => $row->current_category,   // category_1|2|3 or null
+			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
+			// Plot centroid from the admin Map Editor (wp_am_map_objects). null
+			// when the plot hasn't been positioned yet — the Map view falls back
+			// to its "set up in Map Editor" empty state.
+			'lat'               => null === $row->latitude ? null : (float) $row->latitude,
+			'lng'               => null === $row->longitude ? null : (float) $row->longitude,
+		];
+	}
+
+	/**
+	 * Tile-layer config for the Map view. Resolved via the same
+	 * `am_map_tile_layer` filter the main plugin's maps use, so an admin's
+	 * paid-tile-provider override applies here too. Shape mirrors what
+	 * member-map-view.js consumes (url/attribution/maxZoom/subdomains).
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function tile_config(): array {
+		return \apply_filters(
+			'am_map_tile_layer',
+			[
+				'url'         => 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+				'attribution' => '© OpenStreetMap contributors',
+				'maxZoom'     => 19,
+				'subdomains'  => [ 'a', 'b', 'c' ],
 			]
 		);
 	}
