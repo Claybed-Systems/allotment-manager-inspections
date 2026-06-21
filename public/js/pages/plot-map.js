@@ -36,9 +36,10 @@ let leafletPromise = null;
 let savedView = null;
 
 // Reference zoom for label scaling (#4). At this zoom a label renders at its
-// base font size; it scales up (proportional to the plot box) as you zoom in
-// and is clamped so it never shrinks below the base or grows absurdly large.
-const LABEL_REF_ZOOM = 18;
+// base font size; beyond it the font grows GENTLY (roughly doubling every two
+// zoom levels, not every one) so labels stay proportional to the plot box
+// without ballooning past it. Clamped readable-small .. modest.
+const LABEL_REF_ZOOM = 19;
 
 /**
  * Lazy-load the bundled Leaflet CSS + JS. Resolves once window.L is ready.
@@ -365,7 +366,9 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 	// One CSS-variable write drives all labels.
 	function applyLabelScale() {
 		if (!map) return;
-		const scale = Math.max(1, Math.min(6, Math.pow(2, map.getZoom() - LABEL_REF_ZOOM)));
+		// 0.5 exponent = doubles every 2 zoom levels (gentle); clamp keeps it
+		// readable when zoomed out and stops it overflowing when zoomed in.
+		const scale = Math.max(0.85, Math.min(2.2, Math.pow(2, (map.getZoom() - LABEL_REF_ZOOM) * 0.5)));
 		mapEl.style.setProperty('--ami-label-scale', String(scale));
 	}
 	map.on('zoomend', applyLabelScale);
