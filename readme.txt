@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.1.8
+Stable tag: 1.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.1.9 =
+* Fix: committee roles (chair, secretary, manager, committee, IT admin) keep inspector access permanently. The capability is now injected into the role definitions via MemberManager's role filter, so it is no longer wiped when the membership roles are rebuilt on an update.
 
 = 1.1.8 =
 * Internal: code-review polish on the map — finite-rotation guard on labels, hoisted the HTML-escape table, and deferred building plot popups until opened. No user-facing change.

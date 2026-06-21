@@ -40,6 +40,13 @@ final class Plugin {
 		Route::register();
 		Inspect_Ajax::register();
 
+		// Inject the inspector cap into the committee roles via MemberManager's
+		// `am_role_capabilities` seam, so a MemberManager ROLES_VERSION rebuild
+		// (which strips every cap not in the filtered set) can't wipe it. This
+		// is the durable grant; the add_cap in maybe_resync() below is only a
+		// belt for installs where MM isn't the role authority.
+		\add_filter( 'am_role_capabilities', [ Capabilities::class, 'inject_inspector_cap' ], 10, 2 );
+
 		// Re-sync capability on init if version bumped (matches main plugin's
 		// versioned role-sync pattern). Activation runs the cap grant on
 		// first install; this catches version bumps on subsequent updates.
