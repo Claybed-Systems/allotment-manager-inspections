@@ -9,10 +9,27 @@
 const data = window.amiData || {};
 
 /**
+ * admin-ajax endpoint, resolved against the CURRENT origin rather than the
+ * (possibly stale) absolute URL baked into amiData. A PWA whose shell was
+ * cached against an old host — e.g. a pre-cutover preview domain that is now
+ * a different origin or 404s — would otherwise POST cross-origin, which the
+ * site CSP (`connect-src 'self'`) blocks and which never reaches the live WP.
+ * Reads still work from the SW cache, so only writes (sync) silently failed.
+ */
+function ajaxEndpoint() {
+	try {
+		const path = new URL(data.ajaxUrl, window.location.origin).pathname;
+		return window.location.origin + path;
+	} catch (e) {
+		return window.location.origin + '/wp-admin/admin-ajax.php';
+	}
+}
+
+/**
  * GET request to admin-ajax.
  */
 export async function ajaxGet(action, params = {}, nonceKey = 'inspect') {
-	const url = new URL(data.ajaxUrl);
+	const url = new URL(ajaxEndpoint());
 	url.searchParams.set('action', action);
 	url.searchParams.set('nonce', data.nonces[nonceKey]);
 	for (const [k, v] of Object.entries(params)) {
@@ -51,7 +68,7 @@ export async function ajaxPost(action, params = {}, nonceKey = 'inspect', { isFo
 		}
 	}
 
-	const res = await fetch(data.ajaxUrl, {
+	const res = await fetch(ajaxEndpoint(), {
 		method: 'POST',
 		credentials: 'same-origin',
 		body,

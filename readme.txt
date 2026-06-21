@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.4 =
+* Fix: findings now sync even if the app was first opened on an old address — it posts to whatever address you're actually on, instead of a stale one baked in at install time. (Photo previews also needed a companion change to the main plugin's security policy.)
 
 = 1.2.3 =
 * Map: dial back the plot-label scaling — labels were ballooning and overlapping when zoomed in. They now grow gently and stay proportional to the plot.
