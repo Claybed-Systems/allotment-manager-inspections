@@ -95,6 +95,33 @@ class Test_Capabilities extends WP_UnitTestCase {
 		$this->assertNotEmpty( AMI_CAPS_VERSION );
 	}
 
+	public function test_inject_inspector_cap_adds_to_committee_roles(): void {
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'am_site_secretary' );
+		$this->assertTrue( $caps[ AMI_CAPABILITY ] ?? false, 'committee role must gain the inspector cap' );
+		$this->assertTrue( $caps['read'], 'existing caps must be preserved' );
+	}
+
+	public function test_inject_inspector_cap_skips_administrator(): void {
+		// Administrator keeps the cap via add_cap (MM never rebuilds it), so the
+		// filter must NOT inject — avoids double-management.
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'administrator' );
+		$this->assertArrayNotHasKey( AMI_CAPABILITY, $caps );
+	}
+
+	public function test_inject_inspector_cap_ignores_unrelated_roles(): void {
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'editor' );
+		$this->assertArrayNotHasKey( AMI_CAPABILITY, $caps );
+	}
+
+	public function test_inspector_cap_is_hooked_into_am_role_capabilities(): void {
+		// The durable grant: without this hook a MemberManager ROLES_VERSION
+		// rebuild strips the inspector cap from the committee roles.
+		$this->assertNotFalse(
+			has_filter( 'am_role_capabilities', [ Capabilities::class, 'inject_inspector_cap' ] ),
+			'inspections must hook am_role_capabilities so role rebuilds keep am_field_inspector'
+		);
+	}
+
 	public function test_on_activate_grants_cap_to_administrator(): void {
 		Capabilities::on_activate();
 
