@@ -14,7 +14,9 @@
 // 'v3' adds the plot Map view (plot-map.js) + the bundled Leaflet library,
 // precached so the map works offline.
 // 'v4' adds the shared badge component (js/components/badge.js).
-const VERSION = 'v4';
+// 'v5' map honours the tile provider's maxNativeZoom (upscale past Esri's z19
+// instead of showing "Map data not yet available" when zooming in).
+const VERSION = 'v5';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
