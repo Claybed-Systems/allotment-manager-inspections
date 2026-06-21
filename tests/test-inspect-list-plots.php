@@ -40,6 +40,9 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 				'last_name'          => 'Green',
 				'latitude'           => '51.50000000',
 				'longitude'          => '-0.12000000',
+				'width'              => '70',
+				'height'             => '20',
+				'rotation_angle'     => '281.40',
 				'current_finding_id' => null,
 				'current_category'   => null,
 				'previous_category'  => null,
@@ -58,6 +61,12 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 		$this->assertEqualsWithDelta( 51.5, $out['lat'], 0.0001 );
 		$this->assertEqualsWithDelta( -0.12, $out['lng'], 0.0001 );
 
+		// Footprint geometry (drives the map's rotated-rectangle rendering).
+		$this->assertSame( 70, $out['width'] );
+		$this->assertSame( 20, $out['height'] );
+		$this->assertIsFloat( $out['rotation'] );
+		$this->assertEqualsWithDelta( 281.4, $out['rotation'], 0.01 );
+
 		// Existing list fields are preserved.
 		$this->assertSame( 7, $out['id'] );
 		$this->assertSame( 'B1', $out['plotNumber'] );
@@ -65,10 +74,23 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 	}
 
 	public function test_unpositioned_plot_has_null_geometry(): void {
-		$out = $this->call_format( $this->row( array( 'latitude' => null, 'longitude' => null ) ) );
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'latitude'       => null,
+					'longitude'      => null,
+					'width'          => null,
+					'height'         => null,
+					'rotation_angle' => null,
+				)
+			)
+		);
 
 		$this->assertNull( $out['lat'] );
 		$this->assertNull( $out['lng'] );
+		$this->assertNull( $out['width'] );
+		$this->assertNull( $out['height'] );
+		$this->assertNull( $out['rotation'] );
 		// Still a fully-formed plot, just unplaced.
 		$this->assertSame( 'B1', $out['plotNumber'] );
 	}

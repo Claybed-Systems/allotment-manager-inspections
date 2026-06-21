@@ -16,7 +16,9 @@
 // 'v4' adds the shared badge component (js/components/badge.js).
 // 'v5' map honours the tile provider's maxNativeZoom (upscale past Esri's z19
 // instead of showing "Map data not yet available" when zooming in).
-const VERSION = 'v5';
+// 'v6' map draws plot footprints (rotated rectangles that scale with the map)
+// instead of fixed-size dots.
+const VERSION = 'v6';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
