@@ -21,7 +21,10 @@
 // 'v7' plot number + tenant are permanent labels on the map, not hover-only.
 // 'v8' plot labels are rotated to run along each plot (admin-map style) instead
 // of horizontal chips that collide.
-const VERSION = 'v8';
+// 'v9' fix label rotation: out-specify leaflet.css's `.leaflet-marker-icon
+// { display:block }` so the label stays a flex/inline-block element that CSS
+// transform actually applies to (transform is ignored on display:inline).
+const VERSION = 'v9';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
