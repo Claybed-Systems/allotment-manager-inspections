@@ -369,22 +369,26 @@ body {
 	font-size: 15px;
 }
 
-/* Always-on plot labels (number + tenant) centred on each plot footprint. */
-.ami-plot-label.leaflet-tooltip {
-	background: rgba(255, 255, 255, 0.82);
+/* Always-on plot labels (number + tenant) rotated to run along each plot,
+   admin-Map-Editor style. The marker box is centred on the plot; the text is
+   rotated and overflows the box so long names stay centred on the plot. */
+.ami-plot-label-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
 	border: none;
-	border-radius: 4px;
-	box-shadow: none;
-	color: #2b2b2b;
-	font-size: 11px;
-	font-weight: 600;
-	line-height: 1.2;
-	padding: 1px 5px;
-	white-space: nowrap;
+	overflow: visible;
 }
-/* Centre-direction tooltips have no arrow; make sure none is drawn. */
-.ami-plot-label.leaflet-tooltip::before {
-	display: none;
+.ami-plot-label-text {
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 700;
+	color: #fff;
+	/* Dark outline so white text stays legible over imagery or any status fill. */
+	text-shadow: 0 0 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.7);
+	transform-origin: center;
+	pointer-events: none;
 }
 
 /* ===== Finding editor ===== */
