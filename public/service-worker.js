@@ -26,7 +26,9 @@
 // transform actually applies to (transform is ignored on display:inline).
 // 'v10' /code-review polish: finite-rotation guard, hoist escape map, defer
 // popup DOM.
-const VERSION = 'v10';
+// 'v11' findings now POST to the inspections plugin's own save endpoint (so
+// they actually sync); map remembers position; labels scale with zoom.
+const VERSION = 'v11';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

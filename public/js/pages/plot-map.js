@@ -30,6 +30,16 @@ const MARKER_STYLE = {
 // Loaded once per page; reused across List/Map toggles.
 let leafletPromise = null;
 
+// Last map view (center + zoom), kept module-scoped so it survives the SPA's
+// page re-render when the inspector goes map → plot → back to map. Tagged with
+// the round so it isn't restored onto a different round.
+let savedView = null;
+
+// Reference zoom for label scaling (#4). At this zoom a label renders at its
+// base font size; it scales up (proportional to the plot box) as you zoom in
+// and is clamped so it never shrinks below the base or grows absurdly large.
+const LABEL_REF_ZOOM = 18;
+
 /**
  * Lazy-load the bundled Leaflet CSS + JS. Resolves once window.L is ready.
  */
@@ -337,7 +347,29 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		latlngs.push([plot.lat, plot.lng]);
 	}
 
-	map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 19 });
+	// #3 Restore the remembered view for this round; otherwise fit all plots.
+	if (savedView && savedView.roundId === round.id && Array.isArray(savedView.center)) {
+		map.setView(savedView.center, savedView.zoom);
+	} else {
+		map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 19 });
+	}
+	// Remember it on every pan/zoom (moveend fires for both).
+	map.on('moveend', () => {
+		if (!map) return;
+		const c = map.getCenter();
+		savedView = { roundId: round.id, center: [c.lat, c.lng], zoom: map.getZoom() };
+	});
+
+	// #4 Scale the labels with zoom so they stay proportional to the plot box
+	// (which scales natively) instead of looking ever-smaller as you zoom in.
+	// One CSS-variable write drives all labels.
+	function applyLabelScale() {
+		if (!map) return;
+		const scale = Math.max(1, Math.min(6, Math.pow(2, map.getZoom() - LABEL_REF_ZOOM)));
+		mapEl.style.setProperty('--ami-label-scale', String(scale));
+	}
+	map.on('zoomend', applyLabelScale);
+	applyLabelScale();
 
 	// The tab content is swapped in synchronously; nudge Leaflet once layout
 	// settles so tiles fill the container. Tracked so destroy() can cancel it

@@ -388,7 +388,9 @@ body {
 	/* inline-block (not the default inline) so the rotate transform applies. */
 	display: inline-block;
 	white-space: nowrap;
-	font-size: 11px;
+	/* --ami-label-scale is updated on zoom (plot-map.js) so labels scale with
+	   the plot box instead of shrinking to a fixed pixel size when zoomed in. */
+	font-size: calc(11px * var(--ami-label-scale, 1));
 	font-weight: 700;
 	color: #fff;
 	/* Dark outline so white text stays legible over imagery or any status fill. */
