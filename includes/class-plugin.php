@@ -70,8 +70,8 @@ final class Plugin {
 			'pluginUrl'    => AMI_PLUGIN_URL,
 			'version'      => AMI_VERSION,
 			'nonces'       => [
+				// 'inspect' covers the read endpoints AND am_inspect_save_finding.
 				'inspect'      => \wp_create_nonce( 'am_inspect_nonce' ),
-				'recordFinding' => \wp_create_nonce( 'am_record_inspection_finding' ),
 				'uploadPhoto'  => \wp_create_nonce( 'am_inspection_upload_photo' ),
 			],
 			'currentUser'  => [

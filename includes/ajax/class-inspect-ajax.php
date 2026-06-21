@@ -117,10 +117,15 @@ final class Inspect_Ajax {
 		// Relax the committee's 2-inspector minimum for this single-phone call,
 		// then create via the main plugin's model (keeps its validation, the
 		// UNIQUE round_plot guard, exemption + multi-plot logic, etc.).
+		// try/finally so a throw inside create_finding can't leave the filter
+		// registered for later calls in the same process (tests / CLI).
 		$relax = static fn() => 1;
 		\add_filter( 'am_inspection_min_inspectors', $relax );
-		$result = \AllotmentManager\Inspections\Inspection_Finding::create_finding( $data );
-		\remove_filter( 'am_inspection_min_inspectors', $relax );
+		try {
+			$result = \AllotmentManager\Inspections\Inspection_Finding::create_finding( $data );
+		} finally {
+			\remove_filter( 'am_inspection_min_inspectors', $relax );
+		}
 
 		if ( \is_wp_error( $result ) ) {
 			\wp_send_json_error(
