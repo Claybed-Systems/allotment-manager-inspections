@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.1.2
+Stable tag: 1.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.1.3 =
+* Map: fix "Map data not yet available" when zooming in. The map now honours the tile provider's max native zoom (Esri imagery stops at zoom 19), so zooming in upscales the deepest real imagery instead of requesting tiles that don't exist.
 
 = 1.1.2 =
 * Internal: share the status-badge mapping between the plot list and map (new js/components/badge.js) so they can't drift; cancel the map's deferred resize timer on teardown. No user-facing change.

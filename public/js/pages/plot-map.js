@@ -244,7 +244,14 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 	map = L.map(mapEl, { scrollWheelZoom: false });
 	L.tileLayer(t.url || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 		attribution: t.attribution || '',
+		// maxZoom is how far the user may zoom; maxNativeZoom is the deepest
+		// zoom the provider actually serves tiles for (Esri imagery stops at
+		// 19). Honouring maxNativeZoom makes Leaflet UPSCALE those tiles past
+		// it instead of requesting non-existent deeper tiles — without it the
+		// provider returns "Map data not yet available" placeholders when the
+		// inspector zooms in. (The admin Map Editor sets this; we must too.)
 		maxZoom: t.maxZoom || 19,
+		maxNativeZoom: t.maxNativeZoom,
 		subdomains: t.subdomains || 'abc',
 	}).addTo(map);
 

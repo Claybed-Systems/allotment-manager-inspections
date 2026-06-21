@@ -254,10 +254,11 @@ final class Inspect_Ajax {
 		return \apply_filters(
 			'am_map_tile_layer',
 			[
-				'url'         => 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-				'attribution' => '© OpenStreetMap contributors',
-				'maxZoom'     => 19,
-				'subdomains'  => [ 'a', 'b', 'c' ],
+				'url'           => 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+				'attribution'   => '© OpenStreetMap contributors',
+				'maxNativeZoom' => 19,
+				'maxZoom'       => 19,
+				'subdomains'    => [ 'a', 'b', 'c' ],
 			]
 		);
 	}
