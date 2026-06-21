@@ -149,6 +149,9 @@ final class Inspect_Ajax {
 					m.last_name,
 					mo.latitude,
 					mo.longitude,
+					mo.width,
+					mo.height,
+					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					prev.compliance_category AS previous_category
@@ -175,6 +178,9 @@ final class Inspect_Ajax {
 					m.last_name,
 					mo.latitude,
 					mo.longitude,
+					mo.width,
+					mo.height,
+					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					NULL AS previous_category
@@ -234,11 +240,17 @@ final class Inspect_Ajax {
 			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
 			'currentCategory'   => $row->current_category,   // category_1|2|3 or null
 			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
-			// Plot centroid from the admin Map Editor (wp_am_map_objects). null
-			// when the plot hasn't been positioned yet — the Map view falls back
-			// to its "set up in Map Editor" empty state.
+			// Plot footprint from the admin Map Editor (wp_am_map_objects): the
+			// centroid plus the box width/height (pixels at zoom 19) and rotation
+			// (degrees). The map draws the plot's real rotated rectangle from
+			// these so it scales with the satellite imagery instead of a fixed
+			// dot. All null when the plot hasn't been positioned yet — the Map
+			// view then falls back to its "set up in Map Editor" empty state.
 			'lat'               => null === $row->latitude ? null : (float) $row->latitude,
 			'lng'               => null === $row->longitude ? null : (float) $row->longitude,
+			'width'             => null === ( $row->width ?? null ) ? null : (int) $row->width,
+			'height'            => null === ( $row->height ?? null ) ? null : (int) $row->height,
+			'rotation'          => null === ( $row->rotation_angle ?? null ) ? null : (float) $row->rotation_angle,
 		];
 	}
 

@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.1.3
+Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.1.4 =
+* Map: draw each plot as its real footprint — a rotated rectangle that scales with the satellite imagery as you zoom — instead of a fixed-size dot, using the width/height/rotation from the admin Map Editor. Coloured by inspection status.
 
 = 1.1.3 =
 * Map: fix "Map data not yet available" when zooming in. The map now honours the tile provider's max native zoom (Esri imagery stops at zoom 19), so zooming in upscales the deepest real imagery instead of requesting tiles that don't exist.

@@ -79,6 +79,46 @@ function styleFor(category) {
 	};
 }
 
+// Polygon styling for a plot footprint — same palette as the markers, but a
+// translucent fill so the satellite imagery shows through.
+function polyStyleFor(category) {
+	const base = MARKER_STYLE[category] || MARKER_STYLE._none;
+	return { color: base.color, weight: 2, fillColor: base.fillColor, fillOpacity: 0.45 };
+}
+
+// Convert a plot's stored geometry (centroid + width/height in pixels at zoom
+// 19 + rotation in degrees, exactly as the admin Map Editor stores it) into the
+// four corner [lat,lng] points of its real-world rotated rectangle, so Leaflet
+// scales it natively with the map instead of a fixed-size dot. Returns null when
+// the plot has no usable dimensions (then the caller falls back to a marker).
+function rectCorners(plot) {
+	const w = Number(plot.width);
+	const h = Number(plot.height);
+	if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0)) {
+		return null;
+	}
+	const latRad = plot.lat * Math.PI / 180;
+	// Ground metres per pixel at zoom 19 for this latitude (Web Mercator).
+	const mPerPx = 156543.03392 * Math.cos(latRad) / Math.pow(2, 19);
+	const halfW = (w * mPerPx) / 2; // east axis, pre-rotation
+	const halfH = (h * mPerPx) / 2; // south axis, pre-rotation
+	const theta = (Number(plot.rotation) || 0) * Math.PI / 180; // CSS clockwise, y-down
+	const cosT = Math.cos(theta);
+	const sinT = Math.sin(theta);
+	const mPerDegLat = 111320;
+	const mPerDegLng = 111320 * Math.cos(latRad);
+	// (east, south) metre offsets of each corner before rotation.
+	const offsets = [[-halfW, -halfH], [halfW, -halfH], [halfW, halfH], [-halfW, halfH]];
+	return offsets.map(function (o) {
+		const ex = o[0];
+		const sy = o[1];
+		// Replicate the admin map's CSS rotate(theta) on (x=east, y=south).
+		const exR = ex * cosT - sy * sinT;
+		const syR = ex * sinT + sy * cosT;
+		return [plot.lat - syR / mPerDegLat, plot.lng + exR / mPerDegLng];
+	});
+}
+
 /**
  * Build the badge element for a category, reusing the existing .ami-badge CSS.
  */
@@ -257,15 +297,20 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 
 	const latlngs = [];
 	for (const plot of placed) {
-		const marker = L.circleMarker([plot.lat, plot.lng], styleFor(plot.currentCategory)).addTo(map);
+		// Draw the plot's real footprint (a rotated rectangle that scales with
+		// the map) when we have its dimensions; fall back to a dot otherwise.
+		const corners = rectCorners(plot);
+		const layer = corners
+			? L.polygon(corners, polyStyleFor(plot.currentCategory)).addTo(map)
+			: L.circleMarker([plot.lat, plot.lng], styleFor(plot.currentCategory)).addTo(map);
 		// Build the tooltip as a DOM node, not a string: Leaflet injects string
 		// content via innerHTML, and plot numbers / tenant names are
 		// admin/import-sourced. textContent keeps it safe regardless of upstream
 		// sanitisation (matches buildPopup's DOM-node approach).
 		const tipEl = document.createElement('span');
 		tipEl.textContent = plot.tenantName ? `${plot.plotNumber} · ${plot.tenantName}` : plot.plotNumber;
-		marker.bindTooltip(tipEl, { direction: 'top' });
-		marker.bindPopup(buildPopup(plot, round, s, navigate));
+		layer.bindTooltip(tipEl, { direction: 'top' });
+		layer.bindPopup(buildPopup(plot, round, s, navigate));
 		latlngs.push([plot.lat, plot.lng]);
 	}
 
