@@ -130,9 +130,10 @@ function badgeEl(category, strings) {
 	return span;
 }
 
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escapeHtml(str) {
 	return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
-		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		return HTML_ESCAPES[c];
 	});
 }
 
@@ -142,7 +143,10 @@ function escapeHtml(str) {
 // The rotation is the same CSS rotate() the admin map and our footprint use.
 function labelFor(plot) {
 	const text = plot.tenantName ? `${plot.plotNumber} · ${plot.tenantName}` : plot.plotNumber;
-	const rot = Number(plot.rotation) || 0;
+	// Number.isFinite (matching rectCorners) — a non-finite value would emit
+	// an invalid rotate() into the inline style.
+	const rotNum = Number(plot.rotation);
+	const rot = Number.isFinite(rotNum) ? rotNum : 0;
 	const icon = window.L.divIcon({
 		className: 'ami-plot-label-icon',
 		html: `<span class="ami-plot-label-text" style="transform: rotate(${rot}deg)">${escapeHtml(text)}</span>`,
@@ -325,7 +329,9 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		const layer = corners
 			? L.polygon(corners, polyStyleFor(plot.currentCategory)).addTo(map)
 			: L.circleMarker([plot.lat, plot.lng], styleFor(plot.currentCategory)).addTo(map);
-		layer.bindPopup(buildPopup(plot, round, s, navigate));
+		// Defer the popup DOM until it's actually opened (popups open rarely;
+		// building ~190 up front is wasted work on a mobile PWA).
+		layer.bindPopup(() => buildPopup(plot, round, s, navigate));
 		// Always-on label, rotated to run along the plot (admin-map style).
 		labelFor(plot).addTo(map);
 		latlngs.push([plot.lat, plot.lng]);
