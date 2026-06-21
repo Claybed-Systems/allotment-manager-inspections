@@ -11,7 +11,9 @@
 // evict their pre-cached shell and pick up the new bytes on next load.
 // 'v2' adds the issue-tickbox UI (finding-editor) + the api/sync/store
 // pass-through for the 2.11.2 fields.
-const VERSION = 'v2';
+// 'v3' adds the plot Map view (plot-map.js) + the bundled Leaflet library,
+// precached so the map works offline.
+const VERSION = 'v3';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
@@ -27,10 +29,13 @@ const PRECACHE_URLS = [
 	`${PLUGIN_BASE}js/components/header.js`,
 	`${PLUGIN_BASE}js/pages/round-picker.js`,
 	`${PLUGIN_BASE}js/pages/plot-picker.js`,
+	`${PLUGIN_BASE}js/pages/plot-map.js`,
 	`${PLUGIN_BASE}js/pages/finding-editor.js`,
 	`${PLUGIN_BASE}js/services/api.js`,
 	`${PLUGIN_BASE}js/services/store.js`,
 	`${PLUGIN_BASE}js/services/sync.js`,
+	`${PLUGIN_BASE}vendor/leaflet/leaflet.js`,
+	`${PLUGIN_BASE}vendor/leaflet/leaflet.css`,
 	`${PLUGIN_BASE}manifest.webmanifest`,
 	`${PLUGIN_BASE}icons/icon-192.png`,
 	`${PLUGIN_BASE}icons/icon-512.png`,

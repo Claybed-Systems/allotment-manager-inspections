@@ -111,6 +111,11 @@ final class Plugin {
 				'issueTenancyBreach'              => \__( 'Tenancy agreement breach', 'allotment-manager-inspections' ),
 				'tenancyBreachDetailLabel'        => \__( 'Briefly describe the breach', 'allotment-manager-inspections' ),
 				'tenancyBreachDetailPlaceholder'  => \__( 'e.g. subletting, structural change without consent', 'allotment-manager-inspections' ),
+				// Map view.
+				'inspectCta'    => \__( 'Inspect this plot', 'allotment-manager-inspections' ),
+				'mapEmptyTitle' => \__( 'Map view not set up yet.', 'allotment-manager-inspections' ),
+				'mapEmptyBody'  => \__( "The plots in this section need to be positioned in the admin's Map Editor before the map can render them. For now, use the list view.", 'allotment-manager-inspections' ),
+				'mapOffline'    => \__( 'The map could not load. Connect to the internet once to cache it, then try again.', 'allotment-manager-inspections' ),
 			],
 		];
 	}

@@ -7,11 +7,14 @@ library for client-side JPEG/PNG compression before upload.
 
 Source: https://github.com/Donaldcwl/browser-image-compression
 
-## Leaflet (loaded at runtime)
+## Leaflet (bundled)
 
-The plot map view uses the Leaflet library and the tile config from the main
-`allotment-manager` plugin's `map-view.js`. We do not bundle Leaflet; it is loaded by
-the main plugin when the map page is opened.
+Vendored at `public/vendor/leaflet/` (`leaflet.js`, `leaflet.css`, `images/`). Leaflet
+1.9.4, BSD-2-Clause licensed. The plot map view (`public/js/pages/plot-map.js`) loads it
+on demand and the service worker precaches it, so the map works offline — fitting for a
+field app. Tile config is resolved server-side via the shared `am_map_tile_layer` filter.
+
+Source: https://leafletjs.com / https://github.com/Leaflet/Leaflet
 
 ## Icons
 

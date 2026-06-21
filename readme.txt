@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,10 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.1.0 =
+* Plot Map view: the round's plots are drawn on a Leaflet map, coloured by inspection status (not inspected / Pass / Cat 2 / Cat 3). Tap a plot to inspect it.
+* Leaflet is now bundled locally and precached by the service worker, so the map works offline.
 
 = 1.0.0 =
 * Initial release.

@@ -2,7 +2,9 @@
 Thumbs.db
 *.log
 node_modules/
-vendor/
+# Anchor to repo root: this is Composer's dir. Bundled front-end libs live
+# under public/vendor/ (e.g. Leaflet) and public/js/vendor/ and must be tracked.
+/vendor/
 .idea/
 .vscode/
 *.swp
