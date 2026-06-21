@@ -33,7 +33,9 @@
 // 'v13' gentler map-label scaling (was ballooning when zoomed in).
 // 'v14' POST to admin-ajax on the CURRENT origin (a cached cross-origin/stale
 // ajaxUrl was silently failing writes while cached reads still worked).
-const VERSION = 'v14';
+// 'v15' finding editor: delete a just-added photo; bottom padding clears the
+// fixed Save bar so the last tickbox (tenancy breach) is reachable.
+const VERSION = 'v15';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
