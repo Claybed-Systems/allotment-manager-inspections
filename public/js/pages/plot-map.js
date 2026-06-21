@@ -130,6 +130,28 @@ function badgeEl(category, strings) {
 	return span;
 }
 
+function escapeHtml(str) {
+	return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+	});
+}
+
+// Always-on plot label, rotated to run ALONG the plot like the admin Map
+// Editor (so labels sit on their strip instead of colliding horizontally).
+// A non-interactive divIcon marker so taps fall through to the plot's popup.
+// The rotation is the same CSS rotate() the admin map and our footprint use.
+function labelFor(plot) {
+	const text = plot.tenantName ? `${plot.plotNumber} · ${plot.tenantName}` : plot.plotNumber;
+	const rot = Number(plot.rotation) || 0;
+	const icon = window.L.divIcon({
+		className: 'ami-plot-label-icon',
+		html: `<span class="ami-plot-label-text" style="transform: rotate(${rot}deg)">${escapeHtml(text)}</span>`,
+		iconSize: [160, 20],
+		iconAnchor: [80, 10],
+	});
+	return window.L.marker([plot.lat, plot.lng], { icon: icon, interactive: false, keyboard: false });
+}
+
 /**
  * Popup DOM for a plot: number, tenant, status badge, and an Inspect button.
  * Built as a DOM node (not an HTML string) so the button's click handler can be
@@ -303,17 +325,9 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		const layer = corners
 			? L.polygon(corners, polyStyleFor(plot.currentCategory)).addTo(map)
 			: L.circleMarker([plot.lat, plot.lng], styleFor(plot.currentCategory)).addTo(map);
-		// Build the tooltip as a DOM node, not a string: Leaflet injects string
-		// content via innerHTML, and plot numbers / tenant names are
-		// admin/import-sourced. textContent keeps it safe regardless of upstream
-		// sanitisation (matches buildPopup's DOM-node approach).
-		const tipEl = document.createElement('span');
-		tipEl.textContent = plot.tenantName ? `${plot.plotNumber} · ${plot.tenantName}` : plot.plotNumber;
-		// Permanent so the plot number + tenant are always on the map, not just
-		// on hover; centred on the plot's footprint. Tooltips are non-interactive
-		// (pointer-events: none) so taps still fall through to open the popup.
-		layer.bindTooltip(tipEl, { permanent: true, direction: 'center', className: 'ami-plot-label' });
 		layer.bindPopup(buildPopup(plot, round, s, navigate));
+		// Always-on label, rotated to run along the plot (admin-map style).
+		labelFor(plot).addTo(map);
 		latlngs.push([plot.lat, plot.lng]);
 	}
 

@@ -19,7 +19,9 @@
 // 'v6' map draws plot footprints (rotated rectangles that scale with the map)
 // instead of fixed-size dots.
 // 'v7' plot number + tenant are permanent labels on the map, not hover-only.
-const VERSION = 'v7';
+// 'v8' plot labels are rotated to run along each plot (admin-map style) instead
+// of horizontal chips that collide.
+const VERSION = 'v8';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
