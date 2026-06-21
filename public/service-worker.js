@@ -28,7 +28,9 @@
 // popup DOM.
 // 'v11' findings now POST to the inspections plugin's own save endpoint (so
 // they actually sync); map remembers position; labels scale with zoom.
-const VERSION = 'v11';
+// 'v12' app.js auto-reloads on SW update (controllerchange) so a deploy applies
+// in one reload instead of two.
+const VERSION = 'v12';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
