@@ -24,7 +24,9 @@
 // 'v9' fix label rotation: out-specify leaflet.css's `.leaflet-marker-icon
 // { display:block }` so the label stays a flex/inline-block element that CSS
 // transform actually applies to (transform is ignored on display:inline).
-const VERSION = 'v9';
+// 'v10' /code-review polish: finite-rotation guard, hoist escape map, defer
+// popup DOM.
+const VERSION = 'v10';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
