@@ -31,7 +31,9 @@
 // 'v12' app.js auto-reloads on SW update (controllerchange) so a deploy applies
 // in one reload instead of two.
 // 'v13' gentler map-label scaling (was ballooning when zoomed in).
-const VERSION = 'v13';
+// 'v14' POST to admin-ajax on the CURRENT origin (a cached cross-origin/stale
+// ajaxUrl was silently failing writes while cached reads still worked).
+const VERSION = 'v14';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
