@@ -89,7 +89,14 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 		for (const p of state.newPhotos) {
 			const cell = document.createElement('div');
 			cell.className = 'ami-photo ami-photo--pending';
-			cell.innerHTML = `<img src="${p.url}" alt=""><span class="ami-photo__queue-tag">new</span>`;
+			cell.innerHTML = `<img src="${p.url}" alt=""><span class="ami-photo__queue-tag">new</span>`
+				+ `<button type="button" class="ami-photo__delete" aria-label="Remove photo">&times;</button>`;
+			cell.querySelector('.ami-photo__delete').addEventListener('click', () => {
+				URL.revokeObjectURL(p.url);
+				const i = state.newPhotos.indexOf(p);
+				if (i !== -1) state.newPhotos.splice(i, 1);
+				renderPhotos();
+			});
 			grid.appendChild(cell);
 		}
 

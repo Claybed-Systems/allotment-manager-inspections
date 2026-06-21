@@ -404,7 +404,13 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
-	padding-bottom: 80px; /* room for sticky save button */
+}
+/* Room for the fixed save bar so it never covers the last field (the tenancy
+   breach tickbox). Two-class selector so the desktop `.ami-main { padding }`
+   shorthand can't reset it; sized to clear the bar (12 + 52 + bottom pad) plus
+   the phone home-indicator safe-area. */
+.ami-main.ami-finding {
+	padding-bottom: calc(96px + env(safe-area-inset-bottom, 0));
 }
 
 .ami-photo-grid {
@@ -445,6 +451,27 @@ body {
 	font-weight: 700;
 	text-transform: uppercase;
 }
+
+.ami-photo__delete {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(61, 52, 40, 0.72);
+	color: #fff;
+	font-size: 20px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	z-index: 2; /* above the .ami-photo--pending::after overlay */
+}
+.ami-photo__delete:active { background: rgba(61, 52, 40, 0.92); }
 
 .ami-photo-add {
 	aspect-ratio: 1;

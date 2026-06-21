@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.4
+Stable tag: 1.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,10 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.5 =
+* You can now remove a photo you just added (a ✕ button on each new photo) before saving.
+* Fix: the Save button no longer covers the last "Issues observed" tickbox (tenancy breach) — there's now room to scroll it clear of the button.
 
 = 1.2.4 =
 * Fix: findings now sync even if the app was first opened on an old address — it posts to whatever address you're actually on, instead of a stale one baked in at install time. (Photo previews also needed a companion change to the main plugin's security policy.)
