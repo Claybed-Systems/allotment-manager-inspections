@@ -18,7 +18,8 @@
 // instead of showing "Map data not yet available" when zooming in).
 // 'v6' map draws plot footprints (rotated rectangles that scale with the map)
 // instead of fixed-size dots.
-const VERSION = 'v6';
+// 'v7' plot number + tenant are permanent labels on the map, not hover-only.
+const VERSION = 'v7';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

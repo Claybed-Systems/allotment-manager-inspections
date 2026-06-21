@@ -309,7 +309,10 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		// sanitisation (matches buildPopup's DOM-node approach).
 		const tipEl = document.createElement('span');
 		tipEl.textContent = plot.tenantName ? `${plot.plotNumber} · ${plot.tenantName}` : plot.plotNumber;
-		layer.bindTooltip(tipEl, { direction: 'top' });
+		// Permanent so the plot number + tenant are always on the map, not just
+		// on hover; centred on the plot's footprint. Tooltips are non-interactive
+		// (pointer-events: none) so taps still fall through to open the popup.
+		layer.bindTooltip(tipEl, { permanent: true, direction: 'center', className: 'ami-plot-label' });
 		layer.bindPopup(buildPopup(plot, round, s, navigate));
 		latlngs.push([plot.lat, plot.lng]);
 	}
