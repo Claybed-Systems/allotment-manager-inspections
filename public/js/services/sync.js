@@ -21,6 +21,11 @@ import * as api from './api.js';
 
 let inFlight = null;
 
+// Last sync error message (surfaced in the header pill so a silent failure —
+// the reason findings "stay queued forever" — is visible + reportable).
+let lastError = null;
+export function getLastError() { return lastError; }
+
 const listeners = new Set();
 
 export function onSyncChange(cb) {
@@ -44,6 +49,7 @@ export async function syncOnce() {
 	if (!navigator.onLine) return { drained: 0, remaining: await snapshot() };
 	if (inFlight) return inFlight;
 	inFlight = (async () => {
+		lastError = null;
 		emit({ status: 'syncing', ...(await snapshot()) });
 		let drained = 0;
 
@@ -72,6 +78,7 @@ export async function syncOnce() {
 			} catch (e) {
 				// Stop draining findings if the server is reachable but rejected.
 				// Photos for this finding stay queued tagged with pendingFindingId.
+				lastError = (e && e.message) ? e.message : 'Sync failed';
 				console.warn('Sync: finding failed', e);
 				break;
 			}
@@ -85,14 +92,19 @@ export async function syncOnce() {
 				await store.deletePendingPhoto(p.id);
 				drained++;
 			} catch (e) {
+				lastError = (e && e.message) ? e.message : 'Photo upload failed';
 				console.warn('Sync: photo failed', e);
 				break;
 			}
 		}
 
 		const remaining = await snapshot();
-		emit({ status: navigator.onLine ? 'online' : 'offline', ...remaining });
-		return { drained, remaining };
+		const stillQueued = (remaining.findings || 0) + (remaining.photos || 0);
+		const status = lastError && stillQueued > 0
+			? 'error'
+			: ( navigator.onLine ? 'online' : 'offline' );
+		emit({ status, message: lastError, ...remaining });
+		return { drained, remaining, error: lastError };
 	})().finally(() => { inFlight = null; });
 	return inFlight;
 }
