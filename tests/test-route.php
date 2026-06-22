@@ -117,6 +117,23 @@ class Test_Capabilities extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( AMI_CAPABILITY, $caps );
 	}
 
+	public function test_inject_inspector_cap_skips_it_admin(): void {
+		// IT Admin was dropped from default_roles() in AMI_CAPS_VERSION 4 — it's
+		// a system-config role, not an inspector, and lacks
+		// record_inspection_findings, so PWA access alone 403'd every save.
+		// The filter must NOT inject, so a MemberManager role rebuild strips any
+		// previously-granted cap from existing installs.
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'am_it_admin' );
+		$this->assertArrayNotHasKey( AMI_CAPABILITY, $caps );
+	}
+
+	public function test_inject_inspector_cap_still_adds_to_site_manager(): void {
+		// Site Manager keeps PWA access — it records findings too (the matching
+		// record_inspection_findings grant lives in allotment-manager).
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'am_site_manager' );
+		$this->assertTrue( $caps[ AMI_CAPABILITY ] ?? false, 'site manager must keep the inspector cap' );
+	}
+
 	public function test_inspector_cap_is_hooked_into_am_role_capabilities(): void {
 		// The durable grant: without this hook a MemberManager ROLES_VERSION
 		// rebuild strips the inspector cap from the committee roles.

@@ -45,7 +45,11 @@ final class Capabilities {
 			'am_site_secretary',
 			'am_site_manager',
 			'am_committee',
-			'am_it_admin',
+			// am_it_admin is deliberately excluded (v4): IT Admin is a
+			// system-configuration role, not an inspector. It also lacks
+			// record_inspection_findings (granted in allotment-manager), so
+			// granting PWA access alone 403'd every save/edit. Don't re-add
+			// without also granting record_inspection_findings there.
 		];
 	}
 
