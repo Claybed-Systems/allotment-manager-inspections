@@ -174,7 +174,7 @@ final class Inspect_Ajax {
 		// chair/admin override. (The model enforces the baseline record cap.)
 		global $wpdb;
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT inspector_user_ids FROM {$findings_table} WHERE id = %d", $finding_id ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT inspector_user_ids, compliance_category, has_rubbish, has_overgrown_weeds, has_uncultivated_areas, has_derelict_structures, has_tenancy_breach FROM {$findings_table} WHERE id = %d", $finding_id ) );
 		if ( ! $row ) {
 			\wp_send_json_error( [ 'message' => \__( 'Finding not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
@@ -203,6 +203,24 @@ final class Inspect_Ajax {
 		}
 		if ( isset( $_POST['tenancy_breach_description'] ) ) {
 			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
+		}
+
+		// Stale auto-summary guard. The editor pre-fills the notes box with the
+		// existing summary, so an inspector who changes only the RATING (and
+		// leaves the notes) would otherwise keep a summary that now contradicts
+		// the new verdict (e.g. category_2 reading "Pass — no issues recorded.").
+		// If the submitted notes are EXACTLY the auto-summary the CURRENT stored
+		// verdict would produce, the inspector never hand-typed them — clear so
+		// the block below regenerates one for the NEW verdict. Hand-written notes
+		// (which won't match) are preserved untouched.
+		if ( '' !== $notes ) {
+			$before_issue = [];
+			foreach ( [ 'has_rubbish', 'has_overgrown_weeds', 'has_uncultivated_areas', 'has_derelict_structures', 'has_tenancy_breach' ] as $bk ) {
+				$before_issue[ $bk ] = ! empty( $row->$bk ) ? 1 : 0;
+			}
+			if ( $notes === self::auto_summary( (string) ( $row->compliance_category ?? '' ), $before_issue ) ) {
+				$notes = '';
+			}
 		}
 		if ( '' === $notes ) {
 			$data['findings_summary'] = self::auto_summary( $category, $data );
