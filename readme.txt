@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.12
+Stable tag: 1.2.13
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,10 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.13 =
+* Fix: opening a finding you can only view (someone else's, and you're not the chair) no longer breaks the screen.
+* Faster: viewing a plot you can't edit skips an unnecessary database lookup.
 
 = 1.2.12 =
 * You can now edit a finding you already recorded (to fix a mistake). Open the plot, change the rating/notes/issues and tap Update finding. The chair can edit any inspector's finding. Every change is logged.

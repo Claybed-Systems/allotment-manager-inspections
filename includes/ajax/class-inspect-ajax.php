@@ -579,7 +579,10 @@ final class Inspect_Ajax {
 				|| \current_user_can( 'edit_any_inspection_finding' )
 				|| \current_user_can( 'manage_options' );
 			$recorded_by = $finding->inspector_names ? $finding->inspector_names : null;
-			$has_notice  = \class_exists( '\AllotmentManager\Inspections\Inspection_Finding' )
+			// Only needed to warn before an EDIT — skip the COUNT query for
+			// read-only viewers (the hot path is opening plots you can't edit).
+			$has_notice  = $can_edit
+				&& \class_exists( '\AllotmentManager\Inspections\Inspection_Finding' )
 				&& \AllotmentManager\Inspections\Inspection_Finding::finding_has_notice( (int) $finding->id );
 			$edited = ! empty( $finding->updated_at ) && ! empty( $finding->created_at )
 				&& \strtotime( (string) $finding->updated_at ) > \strtotime( (string) $finding->created_at ) + 2;
