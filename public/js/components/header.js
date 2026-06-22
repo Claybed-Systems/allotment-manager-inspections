@@ -60,9 +60,13 @@ function renderSyncPill() {
 
 	const update = (state) => {
 		const queued = (state.findings || 0) + (state.photos || 0);
+		pill._message = state.message || null;
 		if (state.status === 'syncing') {
 			pill.dataset.state = 'syncing';
 			label.textContent = 'Syncing…';
+		} else if (state.status === 'error') {
+			pill.dataset.state = 'error';
+			label.textContent = (queued > 0 ? s.queued.replace('%d', queued) + ' — ' : '') + 'tap';
 		} else if (queued > 0) {
 			pill.dataset.state = 'offline';
 			label.textContent = s.queued.replace('%d', queued);
@@ -75,7 +79,14 @@ function renderSyncPill() {
 	sync.snapshot().then((snap) => update({ status: navigator.onLine ? 'online' : 'offline', ...snap }));
 
 	const off = sync.onSyncChange(update);
-	pill.addEventListener('click', () => { sync.syncOnce(); });
+	pill.addEventListener('click', () => {
+		// If the last sync failed, show why before retrying — a silent failure
+		// is exactly what leaves findings "queued forever" with no explanation.
+		if (pill._message) {
+			window.alert('Couldn’t sync to the server:\n\n' + pill._message + '\n\nTrying again now.');
+		}
+		sync.syncOnce();
+	});
 
 	// Tear-down hook (we don't remove the listener since the header re-renders each route)
 	pill._cleanup = off;

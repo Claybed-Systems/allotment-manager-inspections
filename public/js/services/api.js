@@ -68,13 +68,21 @@ export async function ajaxPost(action, params = {}, nonceKey = 'inspect', { isFo
 		}
 	}
 
-	const res = await fetch(ajaxEndpoint(), {
-		method: 'POST',
-		credentials: 'same-origin',
-		body,
-	});
+	const endpoint = ajaxEndpoint();
+	let res;
+	try {
+		res = await fetch(endpoint, {
+			method: 'POST',
+			credentials: 'same-origin',
+			body,
+		});
+	} catch (e) {
+		// Surface WHERE it tried to reach — distinguishes a dead/old host
+		// (wrong address) from a genuine connectivity problem.
+		throw new Error(`Could not reach ${endpoint} (${e.message})`);
+	}
 	if (!res.ok && res.status !== 400 && res.status !== 403 && res.status !== 404) {
-		throw new Error(`HTTP ${res.status}`);
+		throw new Error(`HTTP ${res.status} from ${endpoint}`);
 	}
 	const json = await res.json();
 	if (!json.success) {

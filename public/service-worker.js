@@ -35,7 +35,9 @@
 // ajaxUrl was silently failing writes while cached reads still worked).
 // 'v15' finding editor: delete a just-added photo; bottom padding clears the
 // fixed Save bar so the last tickbox (tenancy breach) is reachable.
-const VERSION = 'v15';
+// 'v16' sync failures are now visible: the header pill turns red and tapping it
+// shows WHY (incl. the host it tried), instead of silently staying queued.
+const VERSION = 'v16';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

@@ -115,6 +115,12 @@ body {
 	border-color: #bcd6ea;
 }
 
+.ami-header__pill[data-state="error"] {
+	background: #fbe9e7;
+	color: #a63a26;
+	border-color: #f3c6bd;
+}
+
 .ami-header__pill__dot {
 	width: 8px;
 	height: 8px;
