@@ -37,6 +37,7 @@ final class Inspect_Ajax {
 		\add_action( 'wp_ajax_am_inspect_list_plots', [ self::class, 'list_plots' ] );
 		\add_action( 'wp_ajax_am_inspect_get_plot', [ self::class, 'get_plot' ] );
 		\add_action( 'wp_ajax_am_inspect_save_finding', [ self::class, 'save_finding' ] );
+		\add_action( 'wp_ajax_am_inspect_update_finding', [ self::class, 'update_finding' ] );
 	}
 
 	/**
@@ -120,33 +121,7 @@ final class Inspect_Ajax {
 		// summary was typed, synthesise a meaningful one from the rating + any
 		// ticked issues so a rating-only finding still saves and reads sensibly.
 		if ( '' === $notes ) {
-			$issue_labels = [
-				'has_rubbish'             => \__( 'non-compostable rubbish', 'allotment-manager-inspections' ),
-				'has_overgrown_weeds'     => \__( 'overgrown weeds', 'allotment-manager-inspections' ),
-				'has_uncultivated_areas'  => \__( 'uncultivated areas', 'allotment-manager-inspections' ),
-				'has_derelict_structures' => \__( 'derelict structures', 'allotment-manager-inspections' ),
-				'has_tenancy_breach'      => \__( 'tenancy agreement breach', 'allotment-manager-inspections' ),
-			];
-			$ticked = [];
-			foreach ( $issue_labels as $issue_key => $issue_label ) {
-				if ( ! empty( $data[ $issue_key ] ) ) {
-					$ticked[] = $issue_label;
-				}
-			}
-			$base = [
-				'category_1' => \__( 'Pass — no issues recorded.', 'allotment-manager-inspections' ),
-				'category_2' => \__( 'Minor corrections needed.', 'allotment-manager-inspections' ),
-				'category_3' => \__( 'Major issues — action required.', 'allotment-manager-inspections' ),
-			];
-			$summary = $base[ $category ] ?? \__( 'Inspection recorded.', 'allotment-manager-inspections' );
-			if ( $ticked ) {
-				$summary .= ' ' . \sprintf(
-					/* translators: %s: comma-separated list of ticked issues */
-					\__( 'Issues observed: %s.', 'allotment-manager-inspections' ),
-					\implode( ', ', $ticked )
-				);
-			}
-			$data['findings_summary'] = $summary;
+			$data['findings_summary'] = self::auto_summary( $category, $data );
 		}
 
 		// Relax the committee's 2-inspector minimum for this single-phone call,
@@ -170,6 +145,114 @@ final class Inspect_Ajax {
 		}
 
 		\wp_send_json_success( [ 'finding_id' => (int) $result, 'id' => (int) $result ] );
+	}
+
+	/**
+	 * POST action=am_inspect_update_finding
+	 *
+	 * Edits an EXISTING finding (to correct a mistake). Allowed for one of the
+	 * finding's own recorded inspectors, or for chair/admin (the override —
+	 * `edit_any_inspection_finding` cap / manage_options). Maps the payload
+	 * exactly like save_finding and forwards to the main plugin's
+	 * Inspection_Finding::update_finding(), which audit-logs the change and
+	 * keeps the recorded inspector(s) immutable.
+	 *
+	 * @return void
+	 */
+	public static function update_finding(): void {
+		self::authorise();
+
+		$finding_id = isset( $_POST['finding_id'] ) ? (int) $_POST['finding_id'] : 0;
+		if ( $finding_id <= 0 ) {
+			\wp_send_json_error( [ 'message' => \__( 'Missing finding.', 'allotment-manager-inspections' ) ], 400 );
+		}
+		if ( ! \class_exists( '\AllotmentManager\Inspections\Inspection_Finding' ) ) {
+			\wp_send_json_error( [ 'message' => \__( 'Inspections module unavailable.', 'allotment-manager-inspections' ) ], 500 );
+		}
+
+		// Authorise the edit: a recorded inspector on THIS finding, or the
+		// chair/admin override. (The model enforces the baseline record cap.)
+		global $wpdb;
+		$findings_table = $wpdb->prefix . 'am_inspection_findings';
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT inspector_user_ids FROM {$findings_table} WHERE id = %d", $finding_id ) );
+		if ( ! $row ) {
+			\wp_send_json_error( [ 'message' => \__( 'Finding not found.', 'allotment-manager-inspections' ) ], 404 );
+		}
+		$inspector_ids = ! empty( $row->inspector_user_ids ) ? array_map( 'intval', (array) json_decode( (string) $row->inspector_user_ids, true ) ) : [];
+		$is_own      = \in_array( \get_current_user_id(), $inspector_ids, true );
+		$is_override = \current_user_can( 'edit_any_inspection_finding' ) || \current_user_can( 'manage_options' );
+		if ( ! $is_own && ! $is_override ) {
+			\wp_send_json_error( [ 'message' => \__( 'You can only edit your own findings. Ask the chair to change another inspector’s finding.', 'allotment-manager-inspections' ) ], 403 );
+		}
+
+		$category = isset( $_POST['compliance_category'] ) ? \sanitize_key( $_POST['compliance_category'] ) : '';
+		$status   = isset( $_POST['compliance_status'] ) ? \sanitize_key( $_POST['compliance_status'] ) : '';
+		$notes    = isset( $_POST['findings_summary'] ) ? \sanitize_textarea_field( \wp_unslash( $_POST['findings_summary'] ) ) : '';
+
+		$data = [ 'findings_summary' => $notes ];
+		if ( '' !== $category ) {
+			$data['compliance_category'] = $category;
+		}
+		if ( '' !== $status ) {
+			$data['compliance_status'] = $status;
+		}
+		foreach ( [ 'has_rubbish', 'has_overgrown_weeds', 'has_uncultivated_areas', 'has_derelict_structures', 'has_tenancy_breach' ] as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$data[ $key ] = ! empty( $_POST[ $key ] ) ? 1 : 0;
+			}
+		}
+		if ( isset( $_POST['tenancy_breach_description'] ) ) {
+			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
+		}
+		if ( '' === $notes ) {
+			$data['findings_summary'] = self::auto_summary( $category, $data );
+		}
+
+		$result = \AllotmentManager\Inspections\Inspection_Finding::update_finding( $finding_id, $data );
+		if ( \is_wp_error( $result ) ) {
+			\wp_send_json_error( [ 'message' => $result->get_error_message(), 'code' => $result->get_error_code() ], 400 );
+		}
+
+		\wp_send_json_success( [ 'finding_id' => $finding_id, 'id' => $finding_id, 'updated' => true ] );
+	}
+
+	/**
+	 * Synthesise a findings summary from the rating + ticked issues when the
+	 * inspector typed none — a rating-only verdict still needs a non-empty
+	 * summary for Inspection_Finding. Shared by save_finding + update_finding.
+	 *
+	 * @param string $category Compliance category (category_1|2|3).
+	 * @param array  $data     Update data carrying the has_* issue flags.
+	 * @return string
+	 */
+	private static function auto_summary( string $category, array $data ): string {
+		$issue_labels = [
+			'has_rubbish'             => \__( 'non-compostable rubbish', 'allotment-manager-inspections' ),
+			'has_overgrown_weeds'     => \__( 'overgrown weeds', 'allotment-manager-inspections' ),
+			'has_uncultivated_areas'  => \__( 'uncultivated areas', 'allotment-manager-inspections' ),
+			'has_derelict_structures' => \__( 'derelict structures', 'allotment-manager-inspections' ),
+			'has_tenancy_breach'      => \__( 'tenancy agreement breach', 'allotment-manager-inspections' ),
+		];
+		$ticked = [];
+		foreach ( $issue_labels as $issue_key => $issue_label ) {
+			if ( ! empty( $data[ $issue_key ] ) ) {
+				$ticked[] = $issue_label;
+			}
+		}
+		$base = [
+			'category_1' => \__( 'Pass — no issues recorded.', 'allotment-manager-inspections' ),
+			'category_2' => \__( 'Minor corrections needed.', 'allotment-manager-inspections' ),
+			'category_3' => \__( 'Major issues — action required.', 'allotment-manager-inspections' ),
+		];
+		$summary = $base[ $category ] ?? \__( 'Inspection recorded.', 'allotment-manager-inspections' );
+		if ( $ticked ) {
+			$summary .= ' ' . \sprintf(
+				/* translators: %s: comma-separated list of ticked issues */
+				\__( 'Issues observed: %s.', 'allotment-manager-inspections' ),
+				\implode( ', ', $ticked )
+			);
+		}
+		return $summary;
 	}
 
 	/**
@@ -447,7 +530,8 @@ final class Inspect_Ajax {
 				"SELECT
 					id, compliance_category, compliance_status, findings_summary, requires_followup,
 					has_rubbish, has_overgrown_weeds, has_uncultivated_areas,
-					has_derelict_structures, has_tenancy_breach, tenancy_breach_description
+					has_derelict_structures, has_tenancy_breach, tenancy_breach_description,
+					inspector_user_ids, inspector_names, created_at, updated_at
 				FROM {$findings_table}
 				WHERE plot_id = %d AND round_id = %d
 				LIMIT 1",
@@ -477,6 +561,29 @@ final class Inspect_Ajax {
 				],
 				$photo_rows ?: []
 			);
+		}
+
+		// Edit policy + warn metadata for an existing finding. A finding may be
+		// edited by one of its recorded inspectors, or by chair/admin (the
+		// override). `hasNotice` lets the app WARN before changing a finding a
+		// notice was already sent for; `edited` flags a previously-corrected one.
+		$can_edit    = false;
+		$recorded_by = null;
+		$has_notice  = false;
+		$edited      = false;
+		$edited_at   = null;
+		if ( $finding ) {
+			$inspector_ids = ! empty( $finding->inspector_user_ids ) ? (array) json_decode( (string) $finding->inspector_user_ids, true ) : [];
+			$inspector_ids = array_map( 'intval', $inspector_ids );
+			$can_edit = \in_array( \get_current_user_id(), $inspector_ids, true )
+				|| \current_user_can( 'edit_any_inspection_finding' )
+				|| \current_user_can( 'manage_options' );
+			$recorded_by = $finding->inspector_names ? $finding->inspector_names : null;
+			$has_notice  = \class_exists( '\AllotmentManager\Inspections\Inspection_Finding' )
+				&& \AllotmentManager\Inspections\Inspection_Finding::finding_has_notice( (int) $finding->id );
+			$edited = ! empty( $finding->updated_at ) && ! empty( $finding->created_at )
+				&& \strtotime( (string) $finding->updated_at ) > \strtotime( (string) $finding->created_at ) + 2;
+			$edited_at = $edited ? $finding->updated_at : null;
 		}
 
 		$first = trim( (string) ( $row->first_name ?? '' ) );
@@ -511,6 +618,11 @@ final class Inspect_Ajax {
 					'hasDerelictStructures'   => null === $finding->has_derelict_structures  ? null : (bool) $finding->has_derelict_structures,
 					'hasTenancyBreach'        => null === $finding->has_tenancy_breach       ? null : (bool) $finding->has_tenancy_breach,
 					'tenancyBreachDescription' => $finding->tenancy_breach_description,
+						'canEdit'    => $can_edit,
+						'recordedBy' => $recorded_by,
+						'hasNotice'  => $has_notice,
+						'edited'     => $edited,
+						'editedAt'   => $edited_at,
 				] : null,
 				'photos'  => $photos,
 			]

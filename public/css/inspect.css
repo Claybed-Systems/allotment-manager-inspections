@@ -741,6 +741,28 @@ body {
 }
 .ami-queue-row__del:active { background: #f7d9d3; }
 
+/* ===== Edit-an-existing-finding banner ===== */
+.ami-edit-banner {
+	font-size: 13px;
+	line-height: 1.5;
+	padding: 10px 12px;
+	border-radius: var(--ami-radius);
+	background: #e8f1fa;
+	color: #1f5d8a;
+	border: 1px solid #bcd6ea;
+}
+.ami-edit-banner--readonly {
+	background: var(--ami-muted);
+	color: var(--ami-fg-soft);
+	border-color: var(--ami-border);
+}
+.ami-save-readonly {
+	text-align: center;
+	font-size: 14px;
+	color: var(--ami-fg-soft);
+	padding: 14px;
+}
+
 /* ===== Tablet / desktop ===== */
 @media (min-width: 768px) {
 	.ami-main { max-width: 720px; margin: 0 auto; padding: 24px; }

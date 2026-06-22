@@ -37,6 +37,11 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const existing = data.finding;
 	const existingPhotos = data.photos || [];
 
+	// A new finding is always editable; an existing one only by a recorded
+	// inspector or the chair/admin (the server returns canEdit accordingly and
+	// re-checks on save — this just drives the UI).
+	const canEditFinding = !existing || existing.canEdit !== false;
+
 	const state = {
 		rating: existing ? categoryToRating(existing.complianceCategory) : null,
 		notes: existing ? (existing.findingsSummary || '') : '',
@@ -67,6 +72,25 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const main = document.createElement('main');
 	main.className = 'ami-main ami-finding';
 	mount.appendChild(main);
+
+	// Existing finding: show who recorded it + the edit affordance / warning.
+	if (existing) {
+		const banner = document.createElement('div');
+		banner.className = 'ami-edit-banner' + (canEditFinding ? '' : ' ami-edit-banner--readonly');
+		let html = '<strong>Existing inspection</strong>';
+		if (existing.recordedBy) html += ' · recorded by ' + escapeHtml(existing.recordedBy);
+		if (existing.edited) html += ' · <em>edited</em>';
+		html += '<br>';
+		if (!canEditFinding) {
+			html += 'Only the inspector who recorded this, or the chair, can change it.';
+		} else if (existing.hasNotice) {
+			html += '⚠ A notice has already been sent for this plot — editing the result here will <strong>not</strong> change that notice.';
+		} else {
+			html += 'You can correct this result below, then tap Update finding.';
+		}
+		banner.innerHTML = html;
+		main.appendChild(banner);
+	}
 
 	// --- Photos ---
 	const photoLabel = document.createElement('label');
@@ -262,21 +286,48 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	// --- Sticky save bar ---
 	const saveBar = document.createElement('div');
 	saveBar.className = 'ami-save-bar';
-	saveBar.innerHTML = `<button type="button" class="ami-btn" id="ami-save">${s.save}</button>`;
+	if (canEditFinding) {
+		const label = existing ? 'Update finding' : s.save;
+		saveBar.innerHTML = `<button type="button" class="ami-btn" id="ami-save">${escapeHtml(label)}</button>`;
+	} else {
+		saveBar.innerHTML = `<div class="ami-save-readonly">Read-only — you can’t change this finding.</div>`;
+	}
 	mount.appendChild(saveBar);
 	const saveBtn = saveBar.querySelector('#ami-save');
 
 	refreshRatingUI();
 
-	saveBtn.addEventListener('click', async () => {
+	if (saveBtn) saveBtn.addEventListener('click', async () => {
+		const isEdit = !!(existing && existing.id);
+
+		// Warn-and-allow before changing a recorded result; edits are online-only.
+		if (isEdit) {
+			const msg = existing.hasNotice
+				? 'A notice has already been sent for this plot based on the original result. Editing the finding will NOT change that notice. Continue anyway?'
+				: 'You are changing a recorded inspection result. The change is logged. Continue?';
+			if (!window.confirm(msg)) return;
+			if (!navigator.onLine) {
+				window.alert('You need to be online to change an existing finding.');
+				return;
+			}
+		}
+
 		saveBtn.disabled = true;
 		saveBtn.textContent = '…';
 
 		let findingId = existing ? existing.id : null;
 
 		try {
-			// Save (or update) the finding.
-			if (navigator.onLine) {
+			if (isEdit) {
+				// Edit an existing finding (online only — not queued).
+				await api.updateFinding({
+					findingId: existing.id,
+					rating: state.rating,
+					notes: state.notes,
+					issues: state.issues,
+				});
+				findingId = existing.id;
+			} else if (navigator.onLine) {
 				const result = await api.saveFinding({
 					roundId,
 					plotId,
@@ -287,14 +338,13 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 				});
 				findingId = (result && (result.finding_id || result.id)) || findingId;
 			} else {
-				// Queue locally. issues is included in the spread so a
-				// later sync sends it on to api.saveFinding verbatim.
+				// Queue a NEW finding locally (offline). issues is included so a
+				// later sync sends it on to api.saveFinding verbatim. Photos get
+				// tagged with the pending row's id for re-assignment after sync.
 				const pending = await store.queueFinding({
 					roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
 					issues: state.issues,
 				});
-				// Photos taken offline get tagged with the pending row's id so
-				// they can be re-assigned to the real findingId after sync.
 				for (const ph of state.newPhotos) {
 					await store.queuePhoto({ pendingFindingId: pending.id, blob: ph.blob, filename: ph.filename });
 				}
@@ -304,12 +354,11 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 				return;
 			}
 
-			// Upload photos now we have a real finding id.
+			// Upload any newly-added photos now we have a real finding id.
 			for (const ph of state.newPhotos) {
 				try {
 					await api.uploadPhoto({ findingId, blob: ph.blob, filename: ph.filename });
 				} catch (e) {
-					// Queue for retry.
 					await store.queuePhoto({ findingId, blob: ph.blob, filename: ph.filename });
 				}
 			}
@@ -318,7 +367,14 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			sync.syncOnce();
 			navigate('/round/' + roundId);
 		} catch (e) {
-			// Couldn't save online — queue and bail to the round view.
+			if (isEdit) {
+				// Edits are not queued — surface the reason and let them retry.
+				saveBtn.disabled = false;
+				saveBtn.textContent = 'Update finding';
+				window.alert('Couldn’t save the change: ' + ((e && e.message) ? e.message : 'unknown error'));
+				return;
+			}
+			// New finding failed online — queue and bail to the round view.
 			console.warn('Save failed, queueing', e);
 			const pending = await store.queueFinding({
 				roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
