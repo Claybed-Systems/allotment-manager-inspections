@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.8
+Stable tag: 1.2.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.9 =
+* Fix: findings recorded with only a rating (no typed notes) now save. Previously the server required a written summary and silently rejected rating-only findings — which is why they sat in the queue. The summary is filled in automatically from the rating and any ticked issues.
 
 = 1.2.8 =
 * The version number now shows in the header next to the title, so you can always tell which build a device is running.

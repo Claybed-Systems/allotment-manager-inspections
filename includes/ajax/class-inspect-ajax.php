@@ -114,6 +114,41 @@ final class Inspect_Ajax {
 			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
 		}
 
+		// A field inspector often records just a rating (e.g. "Pass") with no
+		// typed notes — but Inspection_Finding::create_finding() requires a
+		// non-empty findings_summary, so those silently failed to sync. When no
+		// summary was typed, synthesise a meaningful one from the rating + any
+		// ticked issues so a rating-only finding still saves and reads sensibly.
+		if ( '' === $notes ) {
+			$issue_labels = [
+				'has_rubbish'             => \__( 'non-compostable rubbish', 'allotment-manager-inspections' ),
+				'has_overgrown_weeds'     => \__( 'overgrown weeds', 'allotment-manager-inspections' ),
+				'has_uncultivated_areas'  => \__( 'uncultivated areas', 'allotment-manager-inspections' ),
+				'has_derelict_structures' => \__( 'derelict structures', 'allotment-manager-inspections' ),
+				'has_tenancy_breach'      => \__( 'tenancy agreement breach', 'allotment-manager-inspections' ),
+			];
+			$ticked = [];
+			foreach ( $issue_labels as $issue_key => $issue_label ) {
+				if ( ! empty( $data[ $issue_key ] ) ) {
+					$ticked[] = $issue_label;
+				}
+			}
+			$base = [
+				'category_1' => \__( 'Pass — no issues recorded.', 'allotment-manager-inspections' ),
+				'category_2' => \__( 'Minor corrections needed.', 'allotment-manager-inspections' ),
+				'category_3' => \__( 'Major issues — action required.', 'allotment-manager-inspections' ),
+			];
+			$summary = $base[ $category ] ?? \__( 'Inspection recorded.', 'allotment-manager-inspections' );
+			if ( $ticked ) {
+				$summary .= ' ' . \sprintf(
+					/* translators: %s: comma-separated list of ticked issues */
+					\__( 'Issues observed: %s.', 'allotment-manager-inspections' ),
+					\implode( ', ', $ticked )
+				);
+			}
+			$data['findings_summary'] = $summary;
+		}
+
 		// Relax the committee's 2-inspector minimum for this single-phone call,
 		// then create via the main plugin's model (keeps its validation, the
 		// UNIQUE round_plot guard, exemption + multi-plot logic, etc.).
