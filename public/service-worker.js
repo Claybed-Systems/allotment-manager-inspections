@@ -37,7 +37,9 @@
 // fixed Save bar so the last tickbox (tenancy breach) is reachable.
 // 'v16' sync failures are now visible: the header pill turns red and tapping it
 // shows WHY (incl. the host it tried), instead of silently staying queued.
-const VERSION = 'v16';
+// 'v17' tap the pill for a full status report (build + queued findings/photos +
+// last error); shell now sends no-cache so devices stop pinning to old builds.
+const VERSION = 'v17';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
