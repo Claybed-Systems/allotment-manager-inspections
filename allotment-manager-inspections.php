@@ -58,8 +58,15 @@ define( 'AMI_CAPABILITY', 'am_field_inspector' );
  * v3: grant `edit_any_inspection_finding` to am_site_chair (lets the chair
  * edit any finding; inspectors can already edit their own, admins via
  * manage_options).
+ *
+ * v4: drop am_it_admin from default_roles(). IT Admin is a system-config
+ * role, not an inspector, and never held record_inspection_findings (granted
+ * in allotment-manager), so PWA access alone 403'd every save. A MemberManager
+ * ROLES_VERSION rebuild — which removes-and-recreates each custom role from the
+ * am_role_capabilities filter set — strips the stale am_field_inspector grant
+ * from existing installs once this version is live (deploy inspections first).
  */
-define( 'AMI_CAPS_VERSION', '3' );
+define( 'AMI_CAPS_VERSION', '4' );
 
 require_once AMI_PLUGIN_DIR . 'includes/class-plugin.php';
 require_once AMI_PLUGIN_DIR . 'includes/class-capabilities.php';
