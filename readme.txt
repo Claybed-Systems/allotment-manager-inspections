@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.13
+Stable tag: 1.2.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.14 =
+* When you change a finding's rating, an auto-generated summary now updates to match (e.g. editing Pass to Minor no longer leaves a 'Pass — no issues recorded.' note). Summaries you typed yourself are left untouched.
 
 = 1.2.13 =
 * Fix: opening a finding you can only view (someone else's, and you're not the chair) no longer breaks the screen.
