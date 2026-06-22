@@ -7,6 +7,7 @@ import { registerViews, start } from './router.js';
 import * as roundPicker from './pages/round-picker.js';
 import * as plotPicker from './pages/plot-picker.js';
 import * as findingEditor from './pages/finding-editor.js';
+import * as queue from './pages/queue.js';
 import { startAutoSync } from './services/sync.js';
 
 const notFound = {
@@ -24,6 +25,7 @@ registerViews({
 	roundPicker,
 	plotPicker,
 	findingEditor,
+	queue,
 	notFound,
 });
 
