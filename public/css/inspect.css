@@ -88,6 +88,14 @@ body {
 	font-weight: 400;
 	color: var(--ami-fg-soft);
 }
+.ami-header__build {
+	margin-left: 8px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--ami-fg-soft);
+	opacity: 0.8;
+	white-space: nowrap;
+}
 
 .ami-header__pill {
 	display: inline-flex;

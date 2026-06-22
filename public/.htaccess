@@ -1,0 +1,20 @@
+# Field Inspector — asset cache headers.
+#
+# The SPA loads app.js with a ?ver cache-buster, but app.js then imports the
+# rest of the code (router.js, services/*, components/*, pages/*) by BARE path
+# with no ?ver. There is no service worker managing those here, so without
+# explicit headers the browser heuristically caches them and never revalidates
+# — meaning code changes never reach an already-visited device (the cause of
+# the "app won't update" wedge). Force a conditional revalidation on every
+# JS/CSS/manifest fetch: a cheap 304 when unchanged, a fresh 200 when changed.
+<IfModule mod_headers.c>
+	<FilesMatch "\.(js|css|webmanifest)$">
+		Header set Cache-Control "no-cache, must-revalidate"
+	</FilesMatch>
+	# The service worker must additionally be allowed to control /inspect/ even
+	# though it is served from this plugin path, and must never be cached.
+	<FilesMatch "service-worker\.js$">
+		Header set Service-Worker-Allowed "/"
+		Header set Cache-Control "no-cache, must-revalidate"
+	</FilesMatch>
+</IfModule>

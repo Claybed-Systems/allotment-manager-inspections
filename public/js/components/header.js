@@ -30,6 +30,12 @@ export function renderHeader({ title, subtitle = '', showBack = false, onBack = 
 	const titleEl = document.createElement('h1');
 	titleEl.className = 'ami-header__title';
 	titleEl.textContent = title || '';
+	// Always-visible build tag (right after the title). If a device is serving a
+	// stale HTTP-cached copy, this shows an OLD number — instant confirmation.
+	const buildTag = document.createElement('span');
+	buildTag.className = 'ami-header__build';
+	buildTag.textContent = 'v' + sync.BUILD;
+	titleEl.appendChild(buildTag);
 	if (subtitle) {
 		const sub = document.createElement('span');
 		sub.className = 'ami-header__sub';
