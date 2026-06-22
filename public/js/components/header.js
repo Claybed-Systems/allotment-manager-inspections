@@ -79,12 +79,26 @@ function renderSyncPill() {
 	sync.snapshot().then((snap) => update({ status: navigator.onLine ? 'online' : 'offline', ...snap }));
 
 	const off = sync.onSyncChange(update);
-	pill.addEventListener('click', () => {
-		// If the last sync failed, show why before retrying — a silent failure
-		// is exactly what leaves findings "queued forever" with no explanation.
-		if (pill._message) {
-			window.alert('Couldn’t sync to the server:\n\n' + pill._message + '\n\nTrying again now.');
-		}
+	pill.addEventListener('click', async () => {
+		// Tapping the pill shows a full status report (build + what's queued +
+		// last error) then retries. A silent failure is exactly what leaves
+		// findings "queued forever" with no explanation — this makes it visible.
+		try {
+			const d = await sync.diagnostics();
+			const url = (window.amiData && window.amiData.ajaxUrl) || '(unknown)';
+			let msg = 'Field Inspector build ' + d.build + '\n';
+			msg += 'Saves to: ' + url + '\n\n';
+			msg += 'Findings waiting: ' + d.findings.length + '\n';
+			msg += 'Photos waiting: ' + d.photos.length + '\n';
+			if (d.photos.length) {
+				msg += 'Photo links: ' + d.photos.map((p) => '(fid=' + p.fid + ', pfid=' + p.pfid + ')').join(', ') + '\n';
+			}
+			if (d.lastError) {
+				msg += '\nLast sync error:\n' + d.lastError + '\n';
+			}
+			msg += '\nTap OK to retry now.';
+			window.alert(msg);
+		} catch (e) { /* ignore */ }
 		sync.syncOnce();
 	});
 

@@ -26,6 +26,27 @@ let inFlight = null;
 let lastError = null;
 export function getLastError() { return lastError; }
 
+// Build tag, baked into this module so the on-screen diagnostic proves at a
+// glance whether the device is actually running the latest code (vs a stale
+// HTTP-cached copy). Bump with the plugin version.
+export const BUILD = '1.2.7';
+
+/**
+ * Full queue snapshot for the on-screen diagnostic (tap the status pill).
+ * Reveals build, where writes POST, and — crucially — whether queued photos
+ * are orphaned (no parent finding to attach to) vs findings that should sync.
+ */
+export async function diagnostics() {
+	const findings = await store.allPendingFindings();
+	const photos = await store.allPendingPhotos();
+	return {
+		build: BUILD,
+		findings: findings.map((f) => ({ plot: f.plotId, round: f.roundId, rating: f.rating })),
+		photos: photos.map((p) => ({ fid: p.findingId || null, pfid: p.pendingFindingId || null, file: p.filename })),
+		lastError,
+	};
+}
+
 const listeners = new Set();
 
 export function onSyncChange(cb) {

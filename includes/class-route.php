@@ -88,6 +88,12 @@ final class Route {
 		// but works because we control the entire HTML output below.
 		self::enqueue_assets();
 
+		// Never let the shell be heuristically cached: it carries the
+		// AMI_VERSION that busts the JS module URLs, so a stale shell pins the
+		// device to an old build (mobile Chrome won't revalidate it on its own).
+		// nocache_headers() sends Cache-Control: no-cache, must-revalidate.
+		\nocache_headers();
+
 		// Render the SPA shell. The included file may use `$data` (from
 		// Plugin::script_data()) and outputs the full HTML response.
 		$data = Plugin::script_data();

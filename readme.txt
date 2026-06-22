@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.6
+Stable tag: 1.2.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,10 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.7 =
+* Tap the status pill for a plain-language status report — which build you're running, how many findings/photos are waiting, and the last sync error.
+* The app page now tells browsers not to cache it, so devices reliably pick up the latest version instead of getting stuck on an old one.
 
 = 1.2.6 =
 * Sync problems are no longer silent: if findings can't reach the server the status pill turns red, and tapping it shows the reason (and retries). Previously a failed sync just sat as "queued" with no explanation.
