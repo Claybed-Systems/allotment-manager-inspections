@@ -13,6 +13,7 @@
 
 const routes = [
 	{ pattern: /^#?\/?$/,                                                  name: 'roundPicker' },
+	{ pattern: /^#?\/?queue\/?$/,                                          name: 'queue' },
 	{ pattern: /^#?\/?round\/(\d+)\/?$/,                                   name: 'plotPicker',    params: ['roundId'] },
 	{ pattern: /^#?\/?round\/(\d+)\/plot\/(\d+)\/?$/,                      name: 'findingEditor', params: ['roundId', 'plotId'] },
 ];

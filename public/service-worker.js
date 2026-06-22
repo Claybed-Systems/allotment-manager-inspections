@@ -43,7 +43,9 @@
 // copy is obvious at a glance.
 // 'v19' rating-only findings (no typed notes) now save — the server fills in a
 // summary from the rating + ticked issues instead of rejecting them.
-const VERSION = 'v19';
+// 'v20' tap the pill to open a Sync queue view: inspect what's waiting, retry,
+// or delete an item that's blocking the queue.
+const VERSION = 'v20';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
@@ -62,6 +64,7 @@ const PRECACHE_URLS = [
 	`${PLUGIN_BASE}js/pages/plot-picker.js`,
 	`${PLUGIN_BASE}js/pages/plot-map.js`,
 	`${PLUGIN_BASE}js/pages/finding-editor.js`,
+	`${PLUGIN_BASE}js/pages/queue.js`,
 	`${PLUGIN_BASE}js/services/api.js`,
 	`${PLUGIN_BASE}js/services/store.js`,
 	`${PLUGIN_BASE}js/services/sync.js`,
