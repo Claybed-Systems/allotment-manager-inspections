@@ -39,7 +39,9 @@
 // shows WHY (incl. the host it tried), instead of silently staying queued.
 // 'v17' tap the pill for a full status report (build + queued findings/photos +
 // last error); shell now sends no-cache so devices stop pinning to old builds.
-const VERSION = 'v17';
+// 'v18' show the build number in the header (after the title) so a stale cached
+// copy is obvious at a glance.
+const VERSION = 'v18';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
