@@ -29,7 +29,7 @@ export function getLastError() { return lastError; }
 // Build tag, baked into this module so the on-screen diagnostic proves at a
 // glance whether the device is actually running the latest code (vs a stale
 // HTTP-cached copy). Bump with the plugin version.
-export const BUILD = '1.2.10';
+export const BUILD = '1.2.11';
 
 /**
  * Full queue snapshot for the on-screen diagnostic (tap the status pill).
@@ -106,8 +106,19 @@ export async function syncOnce() {
 		}
 
 		const photos = await store.allPendingPhotos();
+		const pendingFindingIds = new Set((await store.allPendingFindings()).map((f) => f.id));
+		let orphanedPhotos = 0;
 		for (const p of photos) {
-			if (!p.findingId) continue; // wait until its parent finding lands
+			if (!p.findingId) {
+				// No real finding id yet. If its pending parent is still queued
+				// it's legitimately waiting; otherwise the parent is gone and
+				// this photo can NEVER sync — count it as orphaned so we can
+				// surface it instead of silently skipping it forever.
+				if (!(p.pendingFindingId && pendingFindingIds.has(p.pendingFindingId))) {
+					orphanedPhotos++;
+				}
+				continue;
+			}
 			try {
 				await api.uploadPhoto({ findingId: p.findingId, blob: p.blob, filename: p.filename, caption: p.caption });
 				await store.deletePendingPhoto(p.id);
@@ -117,6 +128,11 @@ export async function syncOnce() {
 				console.warn('Sync: photo failed', e);
 				break;
 			}
+		}
+
+		// Orphaned photos would otherwise sit "waiting" forever with no error.
+		if (!lastError && orphanedPhotos > 0) {
+			lastError = orphanedPhotos + ' photo(s) aren’t linked to a finding and can’t sync — open the queue and delete them, then re-take the photo on the plot.';
 		}
 
 		const remaining = await snapshot();

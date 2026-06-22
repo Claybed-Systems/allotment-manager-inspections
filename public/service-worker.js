@@ -45,7 +45,7 @@
 // summary from the rating + ticked issues instead of rejecting them.
 // 'v20' tap the pill to open a Sync queue view: inspect what's waiting, retry,
 // or delete an item that's blocking the queue.
-const VERSION = 'v20';
+const VERSION = 'v21';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

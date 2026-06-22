@@ -83,14 +83,20 @@ export async function render(_params, { mount, navigate }) {
 		}
 
 		if (photos.length) {
+			const pendingIds = new Set(findings.map((f) => f.id));
 			const h = document.createElement('label');
 			h.className = 'ami-label';
 			h.textContent = 'Photos waiting (' + photos.length + ')';
 			main.appendChild(h);
 			for (const p of photos) {
-				const parent = p.findingId
-					? ('attached to finding ' + p.findingId)
-					: (p.pendingFindingId ? 'waiting for its finding to save first' : 'no parent finding');
+				let parent;
+				if (p.findingId) {
+					parent = 'attached to finding ' + p.findingId;
+				} else if (p.pendingFindingId && pendingIds.has(p.pendingFindingId)) {
+					parent = 'waiting for its finding to save first';
+				} else {
+					parent = '⚠ not linked to a finding — delete it, then re-take the photo';
+				}
 				main.appendChild(row(p.filename || 'photo', parent, async () => { await store.deletePendingPhoto(p.id); draw(); }));
 			}
 		}
