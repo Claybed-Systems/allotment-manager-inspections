@@ -15,6 +15,23 @@ defined( 'ABSPATH' ) || exit;
 final class Capabilities {
 
 	/**
+	 * Capability that lets the holder edit ANY inspection finding (not only
+	 * their own). Granted to the chair; admins are covered by manage_options.
+	 */
+	public const EDIT_ANY_CAP = 'edit_any_inspection_finding';
+
+	/**
+	 * Roles that receive the "edit any finding" override. The chair only —
+	 * administrator is covered by manage_options at the check site, so it is
+	 * deliberately not listed here.
+	 *
+	 * @return string[]
+	 */
+	private static function override_roles(): array {
+		return [ 'am_site_chair' ];
+	}
+
+	/**
 	 * Roles that should receive the inspector capability by default.
 	 *
 	 * Adjust the list and bump AMI_CAPS_VERSION to trigger a re-sync on next page load.
@@ -63,6 +80,9 @@ final class Capabilities {
 		if ( \in_array( $role_slug, self::filter_roles(), true ) ) {
 			$caps[ AMI_CAPABILITY ] = true;
 		}
+		if ( \in_array( $role_slug, self::override_roles(), true ) ) {
+			$caps[ self::EDIT_ANY_CAP ] = true;
+		}
 		return $caps;
 	}
 
@@ -94,6 +114,12 @@ final class Capabilities {
 			$role = \get_role( $role_slug );
 			if ( $role && $role->has_cap( AMI_CAPABILITY ) ) {
 				$role->remove_cap( AMI_CAPABILITY );
+			}
+		}
+		foreach ( self::override_roles() as $role_slug ) {
+			$role = \get_role( $role_slug );
+			if ( $role && $role->has_cap( self::EDIT_ANY_CAP ) ) {
+				$role->remove_cap( self::EDIT_ANY_CAP );
 			}
 		}
 
@@ -129,6 +155,12 @@ final class Capabilities {
 			$role = \get_role( $role_slug );
 			if ( $role && ! $role->has_cap( AMI_CAPABILITY ) ) {
 				$role->add_cap( AMI_CAPABILITY );
+			}
+		}
+		foreach ( self::override_roles() as $role_slug ) {
+			$role = \get_role( $role_slug );
+			if ( $role && ! $role->has_cap( self::EDIT_ANY_CAP ) ) {
+				$role->add_cap( self::EDIT_ANY_CAP );
 			}
 		}
 	}

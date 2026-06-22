@@ -175,6 +175,55 @@ export async function saveFinding({ roundId, plotId, memberId, rating, notes, is
 }
 
 /**
+ * Edit an EXISTING finding (correct a mistake). Same rating → category/status
+ * mapping as saveFinding, but targets the update endpoint by finding id. The
+ * server authorises the edit (own finding, or chair/admin) + audit-logs it;
+ * the recorded inspector(s) are not changed.
+ *
+ * @param {Object} args
+ * @param {number} args.findingId
+ * @param {1|2|3}  args.rating
+ * @param {string} args.notes
+ * @param {Object} [args.issues] Same shape as saveFinding's issues.
+ */
+export async function updateFinding({ findingId, rating, notes, issues }) {
+	const ratingMap = {
+		1: { category: 'category_1', status: 'compliant' },
+		2: { category: 'category_2', status: 'non_compliant' },
+		3: { category: 'category_3', status: 'non_compliant' },
+	};
+	const m = ratingMap[rating];
+	if (!m) throw new Error('Invalid rating: ' + rating);
+
+	const payload = {
+		finding_id:          findingId,
+		compliance_category: m.category,
+		compliance_status:   m.status,
+		findings_summary:    notes || '',
+	};
+
+	if (issues && typeof issues === 'object') {
+		const booleanKeys = [
+			'has_rubbish',
+			'has_overgrown_weeds',
+			'has_uncultivated_areas',
+			'has_derelict_structures',
+			'has_tenancy_breach',
+		];
+		for (const k of booleanKeys) {
+			if (Object.prototype.hasOwnProperty.call(issues, k)) {
+				payload[k] = issues[k] ? 1 : 0;
+			}
+		}
+		if (issues.tenancy_breach_description) {
+			payload.tenancy_breach_description = issues.tenancy_breach_description;
+		}
+	}
+
+	return ajaxPost('am_inspect_update_finding', payload, 'inspect');
+}
+
+/**
  * Upload a photo blob. Uses the main plugin's am_inspection_upload_photo
  * endpoint, which handles Google Drive upload + DB record creation.
  */
