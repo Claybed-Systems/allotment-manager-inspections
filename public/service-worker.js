@@ -41,7 +41,9 @@
 // last error); shell now sends no-cache so devices stop pinning to old builds.
 // 'v18' show the build number in the header (after the title) so a stale cached
 // copy is obvious at a glance.
-const VERSION = 'v18';
+// 'v19' rating-only findings (no typed notes) now save — the server fills in a
+// summary from the rating + ticked issues instead of rejecting them.
+const VERSION = 'v19';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
