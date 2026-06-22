@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.10
+Stable tag: 1.2.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.2.11 =
+* The Sync queue now flags a photo that can't sync because its finding is gone ("not linked to a finding"), and Retry tells you instead of silently doing nothing. Delete it and re-take.
 
 = 1.2.10 =
 * Tap the status pill to open a Sync queue screen: see exactly what's waiting to sync, retry, or delete an item that's stuck (e.g. a finding the server keeps rejecting).
