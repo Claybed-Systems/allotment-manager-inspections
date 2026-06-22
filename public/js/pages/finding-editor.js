@@ -195,7 +195,9 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			const n = parseInt(btn.dataset.rating, 10);
 			btn.classList.toggle('ami-rating__btn--selected', n === state.rating);
 		});
-		saveBtn.disabled = !state.rating;
+		// saveBtn is null in the read-only case (existing finding the user may
+		// not edit) — the save bar renders a note instead of a button.
+		if (saveBtn) saveBtn.disabled = !state.rating;
 	}
 
 	rating.addEventListener('click', (e) => {
