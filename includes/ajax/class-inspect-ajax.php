@@ -347,7 +347,6 @@ final class Inspect_Ajax {
 		global $wpdb;
 		$rounds_table   = $wpdb->prefix . 'am_inspection_rounds';
 		$plots_table    = $wpdb->prefix . 'am_plots';
-		$members_table  = $wpdb->prefix . 'mm_members';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
 		$map_obj_table  = $wpdb->prefix . 'am_map_objects';
 
@@ -359,6 +358,12 @@ final class Inspect_Ajax {
 			\wp_send_json_error( [ 'message' => \__( 'Round not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
 
+		// Resolve each plot's current holder from the active tenancy assignment
+		// (rather than the stale-prone current_member_id). Shared with get_plot so
+		// the list and the detail view always resolve holders identically — see
+		// holder_join_sql() for the full rationale. Exposes `asg` + members alias `m`.
+		$holder_join = self::holder_join_sql();
+
 		// Build the plot list. For a followup round we INNER JOIN against the
 		// parent round's findings (only plots that scored 2 or 3 then are in
 		// scope now). For a primary round we list all plots in the section.
@@ -368,7 +373,8 @@ final class Inspect_Ajax {
 					p.id,
 					p.plot_number,
 					p.section,
-					p.current_member_id,
+					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
+					asg.start_date AS assignment_start_date,
 					m.first_name,
 					m.last_name,
 					mo.latitude,
@@ -381,7 +387,7 @@ final class Inspect_Ajax {
 					prev.compliance_category AS previous_category
 				FROM {$findings_table} prev
 				INNER JOIN {$plots_table} p ON p.id = prev.plot_id
-				LEFT JOIN {$members_table} m ON m.id = p.current_member_id
+				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE prev.round_id = %d
@@ -397,7 +403,8 @@ final class Inspect_Ajax {
 					p.id,
 					p.plot_number,
 					p.section,
-					p.current_member_id,
+					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
+					asg.start_date AS assignment_start_date,
 					m.first_name,
 					m.last_name,
 					mo.latitude,
@@ -409,7 +416,7 @@ final class Inspect_Ajax {
 					curr.compliance_category AS current_category,
 					NULL AS previous_category
 				FROM {$plots_table} p
-				LEFT JOIN {$members_table} m ON m.id = p.current_member_id
+				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE p.section = %s
@@ -455,12 +462,29 @@ final class Inspect_Ajax {
 		$last  = trim( (string) ( $row->last_name ?? '' ) );
 		$name  = trim( $first . ' ' . $last );
 
+		// Effective holder: prefer the SQL-resolved effective_member_id
+		// (active-assignment member ?? current_member_id). Fall back to
+		// current_member_id for older-shaped rows (e.g. unit-test fixtures that
+		// don't carry the resolved column). 0 = genuinely vacant.
+		$member_id = ! empty( $row->effective_member_id )
+			? (int) $row->effective_member_id
+			: ( ! empty( $row->current_member_id ) ? (int) $row->current_member_id : 0 );
+
+		$start_date = ! empty( $row->assignment_start_date ) ? (string) $row->assignment_start_date : null;
+
 		return [
 			'id'                => (int) $row->id,
 			'plotNumber'        => $row->plot_number,
 			'section'           => $row->section,
-			'memberId'          => $row->current_member_id ? (int) $row->current_member_id : null,
+			'memberId'          => $member_id ?: null,
 			'tenantName'        => '' !== $name ? $name : null,
+			// Occupancy state for the field UI: a vacant plot is shown but not
+			// inspectable (recording would fail — create_finding requires a
+			// member); a new tenant is shown flagged "exempt" (the server
+			// auto-exempts them, so it's recordable but no notice is issued).
+			'isVacant'          => 0 === $member_id,
+			'isNewTenant'       => self::is_new_tenant( $member_id, $start_date ),
+			'tenantStartDate'   => $start_date,
 			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
 			'currentCategory'   => $row->current_category,   // category_1|2|3 or null
 			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
@@ -476,6 +500,67 @@ final class Inspect_Ajax {
 			'height'            => null === ( $row->height ?? null ) ? null : (int) $row->height,
 			'rotation'          => null === ( $row->rotation_angle ?? null ) ? null : (float) $row->rotation_angle,
 		];
+	}
+
+	/**
+	 * SQL JOIN fragment that resolves a plot's CURRENT holder from the active
+	 * tenancy assignment — the authoritative tenancy record — rather than the
+	 * denormalised wp_am_plots.current_member_id, which goes stale when a plot is
+	 * reassigned (left NULL, or still pointing at the departed tenant: the known
+	 * "orphaned-allocated" gap, cf. `wp am resync_plot_holders`).
+	 *
+	 * The derived table returns one row per plot — the member id + start_date of
+	 * the most recent active, non-deleted assignment (GROUP_CONCAT/SUBSTRING_INDEX
+	 * picks the latest by start_date, MAX(start_date) is its date). The member
+	 * join then PREFERS the active assignment and falls back to current_member_id
+	 * only when there's no active assignment, so the resolved name + start_date
+	 * always come from the same record. A plot with neither is genuinely vacant.
+	 *
+	 * Assumes the outer query aliases the plots table `p`. Exposes `asg.member_id`,
+	 * `asg.start_date`, and the members alias `m`. Carries no `%` placeholders so
+	 * it interpolates safely into a prepared statement. Shared by list_plots +
+	 * get_plot so the two can never resolve a plot's holder differently.
+	 *
+	 * @return string
+	 */
+	private static function holder_join_sql(): string {
+		global $wpdb;
+		$assign_table  = $wpdb->prefix . 'am_plot_assignments';
+		$members_table = $wpdb->prefix . 'mm_members';
+		return "LEFT JOIN (
+				SELECT plot_id,
+					CAST(SUBSTRING_INDEX(GROUP_CONCAT(member_id ORDER BY start_date DESC, id DESC), ',', 1) AS UNSIGNED) AS member_id,
+					MAX(start_date) AS start_date
+				FROM {$assign_table}
+				WHERE status = 'active' AND deleted_at IS NULL
+				GROUP BY plot_id
+			) asg ON asg.plot_id = p.id
+			LEFT JOIN {$members_table} m ON m.id = COALESCE(asg.member_id, p.current_member_id)";
+	}
+
+	/**
+	 * Whether a plot's current holder is a "new tenant" — started after the
+	 * 1 March cutoff and therefore exempt from compliance notices this round.
+	 *
+	 * UI HINT ONLY. The authoritative exemption runs server-side in
+	 * create_finding() (Inspection_Finding::check_new_tenant_exemption, keyed off
+	 * the round's inspection DATE year), so a slightly stale badge never changes
+	 * the recorded verdict. This badge approximates that with the CURRENT calendar
+	 * year — exact for an in-season round, and good enough for a hint where the
+	 * round's inspection date isn't loaded here. The month/day (1 March) tracks
+	 * Inspection_Finding::NEW_TENANT_CUTOFF — keep them in step if that policy
+	 * date ever changes.
+	 *
+	 * @param int         $member_id  Effective member id (0 = vacant).
+	 * @param string|null $start_date Active assignment start date (Y-m-d) or null.
+	 * @return bool
+	 */
+	private static function is_new_tenant( int $member_id, ?string $start_date ): bool {
+		if ( $member_id <= 0 || empty( $start_date ) ) {
+			return false;
+		}
+		$cutoff = \current_time( 'Y' ) . '-03-01';
+		return $start_date > $cutoff;
 	}
 
 	/**
@@ -518,23 +603,27 @@ final class Inspect_Ajax {
 
 		global $wpdb;
 		$plots_table    = $wpdb->prefix . 'am_plots';
-		$members_table  = $wpdb->prefix . 'mm_members';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
 		$photos_table   = $wpdb->prefix . 'am_inspection_photos';
 
+		// Resolve the holder from the active assignment (see holder_join_sql) so a
+		// freshly-assigned tenant shows by name and the correct member_id flows
+		// into save_finding. Same join as list_plots — single source of truth.
+		$holder_join = self::holder_join_sql();
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT
 					p.id,
 					p.plot_number,
 					p.section,
-					p.current_member_id,
+					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
+					asg.start_date AS assignment_start_date,
 					m.first_name,
 					m.last_name,
 					m.email,
 					m.membership_number
 				FROM {$plots_table} p
-				LEFT JOIN {$members_table} m ON m.id = p.current_member_id
+				{$holder_join}
 				WHERE p.id = %d AND (p.deleted_at IS NULL)",
 				$plot_id
 			)
@@ -611,15 +700,24 @@ final class Inspect_Ajax {
 		$last  = trim( (string) ( $row->last_name ?? '' ) );
 		$name  = trim( $first . ' ' . $last );
 
+		$effective_member_id = ! empty( $row->effective_member_id ) ? (int) $row->effective_member_id : 0;
+		$start_date          = ! empty( $row->assignment_start_date ) ? (string) $row->assignment_start_date : null;
+
 		\wp_send_json_success(
 			[
 				'plot'    => [
 					'id'                => (int) $row->id,
 					'plotNumber'        => $row->plot_number,
 					'section'           => $row->section,
-					'memberId'          => $row->current_member_id ? (int) $row->current_member_id : null,
+					'memberId'          => $effective_member_id ?: null,
 					'tenantName'        => '' !== $name ? $name : null,
 					'membershipNumber'  => $row->membership_number,
+					// Occupancy state — see format_plot_row. Vacant → not
+					// inspectable client-side; new tenant → shown flagged, the
+					// server auto-exempts so no notice is issued.
+					'isVacant'          => 0 === $effective_member_id,
+					'isNewTenant'       => self::is_new_tenant( $effective_member_id, $start_date ),
+					'tenantStartDate'   => $start_date,
 				],
 				'finding' => $finding ? [
 					'id'                 => (int) $finding->id,

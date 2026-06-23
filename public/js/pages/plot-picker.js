@@ -16,6 +16,14 @@ import { badgeMeta } from '../components/badge.js';
 
 const s = window.amiData.strings;
 
+// Remember the inspector's last List/Map choice per round. Returning from a
+// finding navigates back to /round/:id and re-renders this picker; without this
+// the picker always reopened on List, so an inspector working from the Map had
+// to re-tap "Map" after every plot. The map itself already restores its
+// centre+zoom (plot-map.js `savedView`); this restores the tab. Module-scoped
+// so it survives the SPA re-render.
+const lastView = {}; // roundId -> 'list' | 'map'
+
 export async function render({ roundId }, { mount, navigate }) {
 	mount.innerHTML = '';
 	roundId = parseInt(roundId, 10);
@@ -34,6 +42,9 @@ export async function render({ roundId }, { mount, navigate }) {
 
 	const round = data.round;
 	const plots = data.plots || [];
+
+	// Reopen the tab the inspector last used for this round (default List).
+	const initialView = lastView[round.id] === 'map' ? 'map' : 'list';
 
 	const typeLabel = round.inspectionType === 'followup' ? 'Follow-up' : 'First round';
 
@@ -62,8 +73,8 @@ export async function render({ roundId }, { mount, navigate }) {
 	const tabs = document.createElement('div');
 	tabs.className = 'ami-tabs';
 	tabs.innerHTML = `
-		<button type="button" class="ami-tabs__btn ami-tabs__btn--active" data-view="list">${s.list}</button>
-		<button type="button" class="ami-tabs__btn" data-view="map">${s.map}</button>
+		<button type="button" class="ami-tabs__btn${initialView === 'list' ? ' ami-tabs__btn--active' : ''}" data-view="list">${s.list}</button>
+		<button type="button" class="ami-tabs__btn${initialView === 'map' ? ' ami-tabs__btn--active' : ''}" data-view="map">${s.map}</button>
 	`;
 	main.appendChild(tabs);
 
@@ -95,17 +106,28 @@ export async function render({ roundId }, { mount, navigate }) {
 			return;
 		}
 		for (const p of plots) {
-			const row = document.createElement('button');
-			row.type = 'button';
-			row.className = 'ami-plot-row';
-			row.onclick = () => navigate(`/round/${round.id}/plot/${p.id}`);
+			const isVacant = !!p.isVacant;
+			// Vacant plots are shown but not inspectable: a plain div (no button,
+			// no navigation) so the inspector sees the known vacancy without being
+			// able to open a finding that the server would reject.
+			const row = document.createElement(isVacant ? 'div' : 'button');
+			row.className = 'ami-plot-row' + (isVacant ? ' ami-plot-row--vacant' : '');
+			if (!isVacant) {
+				row.type = 'button';
+				row.onclick = () => navigate(`/round/${round.id}/plot/${p.id}`);
+			}
+
+			const newChip = p.isNewTenant ? '<span class="ami-chip ami-chip--new">New</span>' : '';
+			const trailing = isVacant
+				? '<span class="ami-chip ami-chip--vacant">Vacant</span>'
+				: badge(p.currentCategory);
 
 			row.innerHTML = `
 				<span class="ami-plot-row__number">${escapeHtml(p.plotNumber)}</span>
 				<span class="ami-plot-row__name${p.tenantName ? '' : ' ami-plot-row__name__empty'}">
-					${escapeHtml(p.tenantName || 'Vacant')}
+					${escapeHtml(p.tenantName || 'Vacant')}${newChip}
 				</span>
-				${badge(p.currentCategory)}
+				${trailing}
 			`;
 			viewport.appendChild(row);
 		}
@@ -151,10 +173,13 @@ export async function render({ roundId }, { mount, navigate }) {
 		const btn = e.target.closest('.ami-tabs__btn');
 		if (!btn) return;
 		[...tabs.children].forEach((b) => b.classList.toggle('ami-tabs__btn--active', b === btn));
+		lastView[round.id] = btn.dataset.view;
 		(btn.dataset.view === 'map' ? renderMap : renderList)();
 	});
 
-	renderList();
+	// Open the remembered tab (default List). initialView was derived from
+	// lastView[round.id] above, and the tab-click handler is its only writer.
+	(initialView === 'map' ? renderMap : renderList)();
 }
 
 function badge(category) {

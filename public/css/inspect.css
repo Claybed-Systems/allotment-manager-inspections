@@ -763,6 +763,77 @@ body {
 	padding: 14px;
 }
 
+/* Header pill: photos deliberately held for Wi-Fi (amber, not the red error). */
+.ami-header__pill[data-state="held"] {
+	background: #fff4cf;
+	color: #8a5d1d;
+	border-color: #f3deaa;
+}
+
+/* Vacant plot row — shown but not inspectable (not a button). */
+.ami-plot-row--vacant {
+	cursor: default;
+	opacity: 0.72;
+	background: var(--ami-muted);
+}
+.ami-plot-row--vacant:active { transform: none; }
+
+/* Inline chips next to a plot's tenant name. */
+.ami-chip {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 700;
+	vertical-align: middle;
+	white-space: nowrap;
+}
+.ami-chip--new {
+	background: #e8f1fa;
+	color: #1f5d8a;
+}
+.ami-chip--vacant {
+	background: var(--ami-card);
+	color: var(--ami-fg-soft);
+	border: 1px solid var(--ami-border);
+	font-weight: 600;
+}
+
+/* New-tenant exemption banner (amber) — reuses .ami-edit-banner base. */
+.ami-new-tenant-banner {
+	background: #fff1d6;
+	color: #8a5d1d;
+	border-color: #f3deaa;
+	margin-bottom: 12px;
+}
+
+/* Secondary line in a map popup ("New tenant — exempt" / "Not inspectable"). */
+.ami-map-popup__note {
+	font-size: 12px;
+	color: var(--ami-fg-soft);
+	font-style: italic;
+	margin-top: 2px;
+}
+
+/* "Photo uploads" settings card on the Sync queue. */
+.ami-photo-settings {
+	background: var(--ami-card);
+	border: 1px solid var(--ami-border);
+	border-radius: var(--ami-radius);
+	padding: 12px 14px;
+	margin-bottom: 12px;
+	box-shadow: var(--ami-shadow-sm);
+}
+.ami-photo-settings .ami-label { margin-top: 0; }
+.ami-photo-settings .ami-btn { margin-top: 6px; }
+.ami-queue-hint {
+	font-size: 12px;
+	color: var(--ami-fg-soft);
+	line-height: 1.5;
+	margin: 6px 0 2px;
+}
+
 /* ===== Tablet / desktop ===== */
 @media (min-width: 768px) {
 	.ami-main { max-width: 720px; margin: 0 auto; padding: 24px; }
