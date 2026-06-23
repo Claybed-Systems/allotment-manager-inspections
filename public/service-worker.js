@@ -48,7 +48,9 @@
 // 'v25' field-usability pass: vacant plots shown-but-not-inspectable, new
 // tenants flagged exempt, map→save returns to the Map tab, and photos upload in
 // the background (never block save) with a "Wi-Fi only" setting (adds net.js).
-const VERSION = 'v25';
+// 'v26' committee exemption / internal-review: inspector can mark a plot Exempt
+// or Internal review with a committee-only note (db 2.20.0).
+const VERSION = 'v26';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

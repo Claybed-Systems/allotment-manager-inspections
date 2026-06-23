@@ -80,6 +80,13 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			has_tenancy_breach:      existing && existing.hasTenancyBreach !== undefined ? !!existing.hasTenancyBreach : null,
 			tenancy_breach_description: existing && existing.tenancyBreachDescription ? existing.tenancyBreachDescription : '',
 		},
+		// Manual committee exemption / internal-review hold (distinct from the
+		// automatic new-tenant exemption above). Pre-fill from an existing
+		// finding so reopening shows the committee's prior decision + note.
+		exemption: (existing && (existing.complianceStatus === 'exempt' || existing.complianceStatus === 'internal_review'))
+			? existing.complianceStatus
+			: null,
+		committeeNotes: existing && existing.committeeNotes ? existing.committeeNotes : '',
 		newPhotos: [], // { blob, url, filename }
 	};
 
@@ -230,15 +237,17 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			btn.classList.toggle('ami-rating__btn--selected', n === state.rating);
 		});
 		// saveBtn is null in the read-only case (existing finding the user may
-		// not edit) — the save bar renders a note instead of a button.
-		if (saveBtn) saveBtn.disabled = !state.rating;
+		// not edit) — the save bar renders a note instead of a button. A rating
+		// OR a committee exemption is enough to save.
+		if (saveBtn) saveBtn.disabled = !state.rating && !state.exemption;
 	}
 
 	rating.addEventListener('click', (e) => {
 		const btn = e.target.closest('.ami-rating__btn');
 		if (!btn) return;
 		state.rating = parseInt(btn.dataset.rating, 10);
-		refreshRatingUI();
+		state.exemption = null; // rating and exemption are alternatives
+		refreshExemptionUI();
 	});
 
 	// --- Issues observed ---
@@ -319,6 +328,65 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	breachDetailRow.appendChild(breachInput);
 	main.appendChild(breachDetailRow);
 
+	// --- Committee: manual exemption / internal review ---
+	// Exempt the plot (e.g. illness, away for the season) or park it for
+	// Internal review (an excuse was given but the plot looks bad — the
+	// committee decides), with a committee-only note. Choosing one makes the
+	// Rating optional and is recorded instead of a graded verdict.
+	const exemptLabel = document.createElement('label');
+	exemptLabel.className = 'ami-label';
+	exemptLabel.textContent = s.committeeAction || 'Committee';
+	main.appendChild(exemptLabel);
+
+	const exemptRow = document.createElement('div');
+	exemptRow.className = 'ami-rating ami-rating--committee';
+	exemptRow.innerHTML = `
+		<button type="button" class="ami-rating__btn" data-exemption="exempt">
+			<span>${escapeHtml(s.exempt || 'Exempt')}</span>
+		</button>
+		<button type="button" class="ami-rating__btn" data-exemption="internal_review">
+			<span>${escapeHtml(s.internalReview || 'Internal review')}</span>
+		</button>
+	`;
+	main.appendChild(exemptRow);
+
+	// Committee-only note — revealed when an exemption / review is chosen.
+	const committeeNoteWrap = document.createElement('div');
+	committeeNoteWrap.className = 'ami-issue-detail';
+	committeeNoteWrap.style.display = state.exemption ? '' : 'none';
+	const committeeNoteLabel = document.createElement('label');
+	committeeNoteLabel.className = 'ami-label';
+	committeeNoteLabel.htmlFor = 'ami-committee-note';
+	committeeNoteLabel.textContent = s.committeeNote || 'Committee note (not shown to the member)';
+	const committeeNote = document.createElement('textarea');
+	committeeNote.className = 'ami-textarea';
+	committeeNote.id = 'ami-committee-note';
+	committeeNote.placeholder = s.committeeNotePlaceholder || 'e.g. illness, away for the season, or “plot derelict — discuss”';
+	committeeNote.value = state.committeeNotes;
+	committeeNote.addEventListener('input', () => { state.committeeNotes = committeeNote.value; });
+	committeeNoteWrap.appendChild(committeeNoteLabel);
+	committeeNoteWrap.appendChild(committeeNote);
+	main.appendChild(committeeNoteWrap);
+
+	function refreshExemptionUI() {
+		[...exemptRow.children].forEach((btn) => {
+			btn.classList.toggle('ami-rating__btn--selected', btn.dataset.exemption === state.exemption);
+		});
+		committeeNoteWrap.style.display = state.exemption ? '' : 'none';
+		refreshRatingUI(); // re-evaluate the save button (rating OR exemption)
+	}
+
+	exemptRow.addEventListener('click', (e) => {
+		const btn = e.target.closest('.ami-rating__btn');
+		if (!btn) return;
+		const val = btn.dataset.exemption;
+		// Toggle: clicking the active choice clears it. Picking an exemption
+		// clears the rating — they're alternatives.
+		state.exemption = (state.exemption === val) ? null : val;
+		if (state.exemption) state.rating = null;
+		refreshExemptionUI();
+	});
+
 	// --- Sticky save bar ---
 	const saveBar = document.createElement('div');
 	saveBar.className = 'ami-save-bar';
@@ -331,7 +399,7 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	mount.appendChild(saveBar);
 	const saveBtn = saveBar.querySelector('#ami-save');
 
-	refreshRatingUI();
+	refreshExemptionUI(); // sets exemption pills + note visibility, and calls refreshRatingUI
 
 	if (saveBtn) saveBtn.addEventListener('click', async () => {
 		const isEdit = !!(existing && existing.id);
@@ -361,6 +429,8 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 					rating: state.rating,
 					notes: state.notes,
 					issues: state.issues,
+					exemption: state.exemption,
+					committeeNotes: state.committeeNotes,
 				});
 				findingId = existing.id;
 			} else if (navigator.onLine) {
@@ -371,6 +441,8 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 					rating: state.rating,
 					notes: state.notes,
 					issues: state.issues,
+					exemption: state.exemption,
+					committeeNotes: state.committeeNotes,
 				});
 				findingId = (result && (result.finding_id || result.id)) || findingId;
 			} else {
@@ -380,6 +452,7 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 				const pending = await store.queueFinding({
 					roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
 					issues: state.issues,
+					exemption: state.exemption, committeeNotes: state.committeeNotes,
 				});
 				for (const ph of state.newPhotos) {
 					await store.queuePhoto({ pendingFindingId: pending.id, blob: ph.blob, filename: ph.filename });
@@ -422,6 +495,7 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 			const pending = await store.queueFinding({
 				roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,
 				issues: state.issues,
+				exemption: state.exemption, committeeNotes: state.committeeNotes,
 			});
 			for (const ph of state.newPhotos) {
 				await store.queuePhoto({ pendingFindingId: pending.id, blob: ph.blob, filename: ph.filename });

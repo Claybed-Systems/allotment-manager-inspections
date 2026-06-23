@@ -90,6 +90,11 @@ export async function syncOnce({ forcePhotos = false } = {}) {
 					// omitting the tickbox fields entirely (server
 					// records NULL = "not assessed").
 					issues:   f.issues,
+					// Manual exemption / internal-review hold + its note
+					// (undefined on older/graded queued rows → saveFinding
+					// falls through to the rating path).
+					exemption:      f.exemption,
+					committeeNotes: f.committeeNotes,
 				});
 				const newFindingId = result && (result.finding_id || result.id);
 				if (newFindingId) {

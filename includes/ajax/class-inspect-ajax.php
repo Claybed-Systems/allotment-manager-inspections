@@ -115,6 +115,13 @@ final class Inspect_Ajax {
 			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
 		}
 
+		// Committee-only note attached to a manual exemption / internal review.
+		// The main plugin keeps it off the member portal; here it just rides
+		// through. wp_unslash first so an apostrophe isn't stored as \'.
+		if ( isset( $_POST['committee_notes'] ) ) {
+			$data['committee_notes'] = \sanitize_textarea_field( \wp_unslash( $_POST['committee_notes'] ) );
+		}
+
 		// A field inspector often records just a rating (e.g. "Pass") with no
 		// typed notes — but Inspection_Finding::create_finding() requires a
 		// non-empty findings_summary, so those silently failed to sync. When no
@@ -203,6 +210,9 @@ final class Inspect_Ajax {
 		}
 		if ( isset( $_POST['tenancy_breach_description'] ) ) {
 			$data['tenancy_breach_description'] = \sanitize_text_field( \wp_unslash( $_POST['tenancy_breach_description'] ) );
+		}
+		if ( isset( $_POST['committee_notes'] ) ) {
+			$data['committee_notes'] = \sanitize_textarea_field( \wp_unslash( $_POST['committee_notes'] ) );
 		}
 
 		// Stale auto-summary guard. The editor pre-fills the notes box with the
@@ -635,7 +645,7 @@ final class Inspect_Ajax {
 		$finding = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT
-					id, compliance_category, compliance_status, findings_summary, requires_followup,
+					id, compliance_category, compliance_status, findings_summary, committee_notes, requires_followup,
 					has_rubbish, has_overgrown_weeds, has_uncultivated_areas,
 					has_derelict_structures, has_tenancy_breach, tenancy_breach_description,
 					inspector_user_ids, inspector_names, created_at, updated_at
@@ -724,6 +734,10 @@ final class Inspect_Ajax {
 					'complianceCategory' => $finding->compliance_category,
 					'complianceStatus'   => $finding->compliance_status,
 					'findingsSummary'    => $finding->findings_summary,
+					// Committee-only note (manual exemption / internal review).
+					// The PWA is a committee tool, so it's fine to return here;
+					// the main plugin keeps it off the member portal.
+					'committeeNotes'     => $finding->committee_notes,
 					'requiresFollowup'   => (bool) $finding->requires_followup,
 					// Issue-tickbox columns (DB 2.11.2). Null = inspector
 					// didn't assess this aspect; 0/false = explicitly
