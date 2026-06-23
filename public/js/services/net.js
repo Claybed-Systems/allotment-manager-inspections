@@ -48,7 +48,12 @@ function connection() {
  */
 export function connectionType() {
 	const c = connection();
-	return c && c.type ? c.type : null;
+	const t = c && c.type ? c.type : null;
+	// Some browsers expose `.type` as 'unknown' (and 'none' = offline). Treat
+	// those as "can't tell" so Wi-Fi-only falls back to the honest manual-release
+	// path, instead of claiming detection and then ALWAYS reporting "not Wi-Fi"
+	// (which would hold photos forever even on real Wi-Fi, with a wrong hint).
+	return (t && t !== 'unknown' && t !== 'none') ? t : null;
 }
 
 /** Whether this browser can tell Wi-Fi from mobile data at all. */

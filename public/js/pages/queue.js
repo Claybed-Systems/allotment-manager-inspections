@@ -188,10 +188,18 @@ export async function render(_params, { mount, navigate }) {
 
 	await draw();
 
-	// Keep the queue live: redraw whenever the sync state changes — background
+	// Keep the queue live: redraw when the QUEUE CONTENTS change — background
 	// uploads draining, or photos released after turning Wi-Fi-only off — so the
 	// list and the "Upload photos now" button reflect reality without a manual
-	// retry. The router invokes the returned cleanup when navigating away.
-	const off = sync.onSyncChange(() => { draw(); });
+	// retry. Guard on the finding/photo counts so the transient 'syncing' emit
+	// (which carries the same pre-drain counts) doesn't tear down and rebuild the
+	// page mid-interaction. The router invokes the returned cleanup on navigate.
+	let lastCounts = null;
+	const off = sync.onSyncChange((state) => {
+		const counts = (state.findings ?? -1) + ':' + (state.photos ?? -1);
+		if (counts === lastCounts) return;
+		lastCounts = counts;
+		draw();
+	});
 	return () => { if (off) off(); };
 }

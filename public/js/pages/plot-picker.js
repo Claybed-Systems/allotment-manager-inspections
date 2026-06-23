@@ -177,8 +177,8 @@ export async function render({ roundId }, { mount, navigate }) {
 		(btn.dataset.view === 'map' ? renderMap : renderList)();
 	});
 
-	// Open the remembered tab (default List).
-	lastView[round.id] = initialView;
+	// Open the remembered tab (default List). initialView was derived from
+	// lastView[round.id] above, and the tab-click handler is its only writer.
 	(initialView === 'map' ? renderMap : renderList)();
 }
 
