@@ -18,6 +18,7 @@
 
 import * as store from './store.js';
 import * as api from './api.js';
+import * as net from './net.js';
 
 let inFlight = null;
 
@@ -29,7 +30,7 @@ export function getLastError() { return lastError; }
 // Build tag, baked into this module so the on-screen diagnostic proves at a
 // glance whether the device is actually running the latest code (vs a stale
 // HTTP-cached copy). Bump with the plugin version.
-export const BUILD = '1.2.14';
+export const BUILD = '1.3.0';
 
 /**
  * Full queue snapshot for the on-screen diagnostic (tap the status pill).
@@ -66,7 +67,7 @@ export async function snapshot() {
 	return { findings: findings.length, photos: photos.length };
 }
 
-export async function syncOnce() {
+export async function syncOnce({ forcePhotos = false } = {}) {
 	if (!navigator.onLine) return { drained: 0, remaining: await snapshot() };
 	if (inFlight) return inFlight;
 	inFlight = (async () => {
@@ -107,7 +108,12 @@ export async function syncOnce() {
 
 		const photos = await store.allPendingPhotos();
 		const pendingFindingIds = new Set((await store.allPendingFindings()).map((f) => f.id));
+		// Photos are large — only spend mobile data on them when policy allows
+		// (Wi-Fi-only off, or on-and-on-Wi-Fi, or the user forced an upload).
+		// Findings (tiny) already drained above regardless of connection.
+		const allowPhotos = net.photosAllowedNow({ force: forcePhotos });
 		let orphanedPhotos = 0;
+		let heldPhotos = 0;
 		for (const p of photos) {
 			if (!p.findingId) {
 				// No real finding id yet. If its pending parent is still queued
@@ -117,6 +123,13 @@ export async function syncOnce() {
 				if (!(p.pendingFindingId && pendingFindingIds.has(p.pendingFindingId))) {
 					orphanedPhotos++;
 				}
+				continue;
+			}
+			if (!allowPhotos) {
+				// Wi-Fi-only is on and we're not (known to be) on Wi-Fi — hold the
+				// photo rather than burn mobile data. Surfaced as a non-error
+				// "waiting for Wi-Fi" state, not a failure.
+				heldPhotos++;
 				continue;
 			}
 			try {
@@ -137,11 +150,19 @@ export async function syncOnce() {
 
 		const remaining = await snapshot();
 		const stillQueued = (remaining.findings || 0) + (remaining.photos || 0);
-		const status = lastError && stillQueued > 0
-			? 'error'
-			: ( navigator.onLine ? 'online' : 'offline' );
-		emit({ status, message: lastError, ...remaining });
-		return { drained, remaining, error: lastError };
+		let status;
+		let message = lastError;
+		if (lastError && stillQueued > 0) {
+			status = 'error';
+		} else if (heldPhotos > 0) {
+			// Not a failure — photos are deliberately waiting for Wi-Fi.
+			status = 'held';
+			message = heldPhotos + ' photo(s) waiting for Wi-Fi.';
+		} else {
+			status = navigator.onLine ? 'online' : 'offline';
+		}
+		emit({ status, message, held: heldPhotos, ...remaining });
+		return { drained, remaining, error: lastError, held: heldPhotos };
 	})().finally(() => { inFlight = null; });
 	return inFlight;
 }
@@ -156,6 +177,12 @@ export function startAutoSync() {
 	window.addEventListener('offline', async () => {
 		emit({ status: 'offline', ...(await snapshot()) });
 	});
+
+	// Auto-resume held photos when the connection switches to Wi-Fi (Android
+	// Chrome fires connection 'change'; iOS has no such event, so there the
+	// inspector taps "Upload photos now" from the queue). Cheap when nothing
+	// is held — syncOnce no-ops if the queue is empty.
+	net.onConnectionChange(() => { if (navigator.onLine) syncOnce(); });
 
 	// Try once at boot.
 	if (navigator.onLine) syncOnce();

@@ -189,6 +189,28 @@ function buildPopup(plot, round, strings, navigate) {
 		name.classList.add('is-empty');
 	}
 
+	wrap.append(num, name);
+
+	// New tenant — exempt from notices this round (still recordable from the
+	// finding screen; the server saves it exempt).
+	if (plot.isNewTenant) {
+		const note = document.createElement('div');
+		note.className = 'ami-map-popup__note';
+		note.textContent = 'New tenant — exempt';
+		wrap.append(note);
+	}
+
+	// Vacant plots are shown but not inspectable — no tenant to record against,
+	// so omit the Inspect button (and the status badge, which would be "Not
+	// inspected" and misleading).
+	if (plot.isVacant) {
+		const note = document.createElement('div');
+		note.className = 'ami-map-popup__note';
+		note.textContent = 'Not inspectable';
+		wrap.append(note);
+		return wrap;
+	}
+
 	const status = document.createElement('div');
 	status.className = 'ami-map-popup__status';
 	status.appendChild(badgeEl(plot.currentCategory, strings));
@@ -199,7 +221,7 @@ function buildPopup(plot, round, strings, navigate) {
 	btn.textContent = strings.inspectCta || 'Inspect this plot';
 	btn.addEventListener('click', () => navigate(`/round/${round.id}/plot/${plot.id}`));
 
-	wrap.append(num, name, status, btn);
+	wrap.append(status, btn);
 	return wrap;
 }
 
@@ -337,9 +359,17 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		// Draw the plot's real footprint (a rotated rectangle that scales with
 		// the map) when we have its dimensions; fall back to a dot otherwise.
 		const corners = rectCorners(plot);
+		const style = corners ? polyStyleFor(plot.currentCategory) : styleFor(plot.currentCategory);
+		// Vacant plots are shown but not inspectable — render them faded + dashed
+		// so they read as "known empty", not "occupied, awaiting inspection".
+		if (plot.isVacant) {
+			style.dashArray = '4 5';
+			style.opacity = 0.6;
+			style.fillOpacity = corners ? 0.12 : 0.4;
+		}
 		const layer = corners
-			? L.polygon(corners, polyStyleFor(plot.currentCategory)).addTo(map)
-			: L.circleMarker([plot.lat, plot.lng], styleFor(plot.currentCategory)).addTo(map);
+			? L.polygon(corners, style).addTo(map)
+			: L.circleMarker([plot.lat, plot.lng], style).addTo(map);
 		// Defer the popup DOM until it's actually opened (popups open rarely;
 		// building ~190 up front is wasted work on a mobile PWA).
 		layer.bindPopup(() => buildPopup(plot, round, s, navigate));

@@ -45,7 +45,10 @@
 // summary from the rating + ticked issues instead of rejecting them.
 // 'v20' tap the pill to open a Sync queue view: inspect what's waiting, retry,
 // or delete an item that's blocking the queue.
-const VERSION = 'v24';
+// 'v25' field-usability pass: vacant plots shown-but-not-inspectable, new
+// tenants flagged exempt, map→save returns to the Map tab, and photos upload in
+// the background (never block save) with a "Wi-Fi only" setting (adds net.js).
+const VERSION = 'v25';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
@@ -68,6 +71,7 @@ const PRECACHE_URLS = [
 	`${PLUGIN_BASE}js/services/api.js`,
 	`${PLUGIN_BASE}js/services/store.js`,
 	`${PLUGIN_BASE}js/services/sync.js`,
+	`${PLUGIN_BASE}js/services/net.js`,
 	`${PLUGIN_BASE}vendor/leaflet/leaflet.js`,
 	`${PLUGIN_BASE}vendor/leaflet/leaflet.css`,
 	`${PLUGIN_BASE}manifest.webmanifest`,

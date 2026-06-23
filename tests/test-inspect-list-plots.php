@@ -104,6 +104,78 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 		$this->assertNull( $out['memberId'] );
 	}
 
+	public function test_resolves_holder_from_active_assignment_when_current_member_null(): void {
+		// current_member_id left NULL (the orphaned-allocated gap) but the active
+		// assignment resolves the holder — the plot must still show by name and
+		// carry the resolved member id (so save_finding can fire the exemption).
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'     => null,
+					'effective_member_id'   => 99,
+					'first_name'            => 'Bob',
+					'last_name'             => 'New',
+					'assignment_start_date' => ( (int) gmdate( 'Y' ) - 5 ) . '-04-01',
+				)
+			)
+		);
+
+		$this->assertSame( 99, $out['memberId'] );
+		$this->assertSame( 'Bob New', $out['tenantName'] );
+		$this->assertFalse( $out['isVacant'] );
+		$this->assertFalse( $out['isNewTenant'] );
+	}
+
+	public function test_new_tenant_flagged_when_started_after_march_cutoff(): void {
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'     => 99,
+					'effective_member_id'   => 99,
+					'first_name'            => 'Casey',
+					'last_name'             => 'Fresh',
+					'assignment_start_date' => gmdate( 'Y' ) . '-06-01', // after 1 March of this year
+				)
+			)
+		);
+
+		$this->assertTrue( $out['isNewTenant'] );
+		$this->assertFalse( $out['isVacant'] );
+		$this->assertSame( gmdate( 'Y' ) . '-06-01', $out['tenantStartDate'] );
+	}
+
+	public function test_established_tenant_not_flagged_new(): void {
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'     => 99,
+					'effective_member_id'   => 99,
+					'assignment_start_date' => ( (int) gmdate( 'Y' ) - 3 ) . '-04-01',
+				)
+			)
+		);
+
+		$this->assertFalse( $out['isNewTenant'] );
+	}
+
+	public function test_vacant_plot_flags(): void {
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'   => null,
+					'effective_member_id' => null,
+					'first_name'          => null,
+					'last_name'           => null,
+				)
+			)
+		);
+
+		$this->assertTrue( $out['isVacant'] );
+		$this->assertFalse( $out['isNewTenant'] );
+		$this->assertNull( $out['tenantStartDate'] );
+		$this->assertNull( $out['memberId'] );
+	}
+
 	public function test_tile_config_is_well_formed(): void {
 		$tile = $this->call_tile_config();
 

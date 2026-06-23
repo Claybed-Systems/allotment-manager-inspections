@@ -74,6 +74,12 @@ function renderSyncPill() {
 		} else if (state.status === 'error') {
 			pill.dataset.state = 'error';
 			label.textContent = (queued > 0 ? s.queued.replace('%d', queued) + ' — ' : '') + 'tap';
+		} else if (state.status === 'held') {
+			// Photos deliberately waiting for Wi-Fi — amber, not red. Tap → queue.
+			// Show the HELD photo count specifically (findings sync regardless of
+			// the Wi-Fi setting, so the total queue count would overstate it).
+			pill.dataset.state = 'held';
+			label.textContent = (state.held || queued) + ' · Wi-Fi';
 		} else if (queued > 0) {
 			pill.dataset.state = 'offline';
 			label.textContent = s.queued.replace('%d', queued);

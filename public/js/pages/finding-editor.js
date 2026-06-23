@@ -37,6 +37,27 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const existing = data.finding;
 	const existingPhotos = data.photos || [];
 
+	// Vacant plots are not inspectable — there's no tenant, and the server
+	// requires a member to record a finding (it would fail + stick in the
+	// queue). The list/map already make vacant plots non-tappable; this guards
+	// the direct-URL case. An existing finding (recorded before they left) is
+	// still shown so it can be viewed/corrected.
+	if (plot.isVacant && !existing) {
+		mount.appendChild(renderHeader({
+			title: 'Plot ' + plot.plotNumber,
+			subtitle: 'Vacant',
+			showBack: true,
+			onBack: () => navigate('/round/' + roundId),
+		}));
+		const vm = document.createElement('main');
+		vm.className = 'ami-main';
+		vm.innerHTML = '<div class="ami-empty"><p><strong>This plot is vacant.</strong></p>'
+			+ '<p>There’s no current tenant, so there’s nothing to inspect. '
+			+ 'If you believe someone holds this plot, ask the committee to check its tenancy record.</p></div>';
+		mount.appendChild(vm);
+		return;
+	}
+
 	// A new finding is always editable; an existing one only by a recorded
 	// inspector or the chair/admin (the server returns canEdit accordingly and
 	// re-checks on save — this just drives the UI).
@@ -72,6 +93,19 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const main = document.createElement('main');
 	main.className = 'ami-main ami-finding';
 	mount.appendChild(main);
+
+	// New tenant: exempt from compliance notices this round (took the plot on
+	// after the 1 March cutoff). Recording is still allowed — the server saves
+	// it as exempt and issues no notice — so the inspector can note what they
+	// see without penalising someone who's just started.
+	if (plot.isNewTenant) {
+		const nt = document.createElement('div');
+		nt.className = 'ami-edit-banner ami-new-tenant-banner';
+		nt.innerHTML = '<strong>New tenant — exempt</strong><br>'
+			+ 'Taken on after the 1 March cut-off, so this plot is exempt from notices this round. '
+			+ 'You can still record what you see — it’s saved as exempt and no notice is sent.';
+		main.appendChild(nt);
+	}
 
 	// Existing finding: show who recorded it + the edit affordance / warning.
 	if (existing) {
@@ -356,12 +390,19 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 				return;
 			}
 
-			// Upload any newly-added photos now we have a real finding id.
+			// Queue the photos against the real finding id and let the background
+			// sync loop upload them — do NOT await uploads here. A slow photo
+			// upload over mobile data used to pin the inspector on this screen
+			// until every photo finished; now the save returns immediately and
+			// the header pill shows upload progress (honouring the Wi-Fi-only
+			// setting). Same queue path online + offline. Each queue write is
+			// guarded so a (rare) IndexedDB failure can't bubble to the outer
+			// catch and wrongly re-queue the finding that already saved.
 			for (const ph of state.newPhotos) {
 				try {
-					await api.uploadPhoto({ findingId, blob: ph.blob, filename: ph.filename });
-				} catch (e) {
 					await store.queuePhoto({ findingId, blob: ph.blob, filename: ph.filename });
+				} catch (e) {
+					console.warn('Could not queue photo for upload', e);
 				}
 			}
 			state.newPhotos = [];

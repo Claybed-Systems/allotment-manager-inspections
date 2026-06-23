@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.2.14
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,12 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.3.0 =
+* New tenants now show by name even when the plot's tenancy record hasn't been re-synced (the app resolves the current holder from the active assignment), and are flagged "New — exempt": you can still record what you see, but the system saves it exempt and sends no notice (they're inside the 1 March grace period).
+* Vacant plots are now shown but not inspectable — they appear greyed/dashed on the list and map so you can see they're known vacancies, but you can't open a finding that the server would reject.
+* Saving a finding from the Map now returns you to the Map (at the same position) instead of dropping you back to the List.
+* Photos no longer block you: saving a finding returns immediately and photos upload in the background. New "Upload photos on Wi-Fi only" setting (Sync queue) holds large photo uploads for Wi-Fi while findings still sync on mobile data; on phones that can detect Wi-Fi it resumes automatically, otherwise tap "Upload photos now" when you're back on Wi-Fi.
 
 = 1.2.14 =
 * When you change a finding's rating, an auto-generated summary now updates to match (e.g. editing Pass to Minor no longer leaves a 'Pass — no issues recorded.' note). Summaries you typed yourself are left untouched.
