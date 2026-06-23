@@ -128,7 +128,7 @@ final class Inspect_Ajax {
 		// summary was typed, synthesise a meaningful one from the rating + any
 		// ticked issues so a rating-only finding still saves and reads sensibly.
 		if ( '' === $notes ) {
-			$data['findings_summary'] = self::auto_summary( $category, $data );
+			$data['findings_summary'] = self::auto_summary( $category, $data, $status );
 		}
 
 		// Relax the committee's 2-inspector minimum for this single-phone call,
@@ -181,7 +181,7 @@ final class Inspect_Ajax {
 		// chair/admin override. (The model enforces the baseline record cap.)
 		global $wpdb;
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT inspector_user_ids, compliance_category, has_rubbish, has_overgrown_weeds, has_uncultivated_areas, has_derelict_structures, has_tenancy_breach FROM {$findings_table} WHERE id = %d", $finding_id ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT inspector_user_ids, compliance_category, compliance_status, has_rubbish, has_overgrown_weeds, has_uncultivated_areas, has_derelict_structures, has_tenancy_breach FROM {$findings_table} WHERE id = %d", $finding_id ) );
 		if ( ! $row ) {
 			\wp_send_json_error( [ 'message' => \__( 'Finding not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
@@ -228,12 +228,12 @@ final class Inspect_Ajax {
 			foreach ( [ 'has_rubbish', 'has_overgrown_weeds', 'has_uncultivated_areas', 'has_derelict_structures', 'has_tenancy_breach' ] as $bk ) {
 				$before_issue[ $bk ] = ! empty( $row->$bk ) ? 1 : 0;
 			}
-			if ( $notes === self::auto_summary( (string) ( $row->compliance_category ?? '' ), $before_issue ) ) {
+			if ( $notes === self::auto_summary( (string) ( $row->compliance_category ?? '' ), $before_issue, (string) ( $row->compliance_status ?? '' ) ) ) {
 				$notes = '';
 			}
 		}
 		if ( '' === $notes ) {
-			$data['findings_summary'] = self::auto_summary( $category, $data );
+			$data['findings_summary'] = self::auto_summary( $category, $data, $status );
 		}
 
 		$result = \AllotmentManager\Inspections\Inspection_Finding::update_finding( $finding_id, $data );
@@ -253,7 +253,7 @@ final class Inspect_Ajax {
 	 * @param array  $data     Update data carrying the has_* issue flags.
 	 * @return string
 	 */
-	private static function auto_summary( string $category, array $data ): string {
+	private static function auto_summary( string $category, array $data, string $status = '' ): string {
 		$issue_labels = [
 			'has_rubbish'             => \__( 'non-compostable rubbish', 'allotment-manager-inspections' ),
 			'has_overgrown_weeds'     => \__( 'overgrown weeds', 'allotment-manager-inspections' ),
@@ -272,7 +272,13 @@ final class Inspect_Ajax {
 			'category_2' => \__( 'Minor corrections needed.', 'allotment-manager-inspections' ),
 			'category_3' => \__( 'Major issues — action required.', 'allotment-manager-inspections' ),
 		];
-		$summary = $base[ $category ] ?? \__( 'Inspection recorded.', 'allotment-manager-inspections' );
+		// Exemption / internal-review findings carry no category, so fall back
+		// to a status-specific line rather than the generic default.
+		$status_base = [
+			'exempt'          => \__( 'Plot exempt this round.', 'allotment-manager-inspections' ),
+			'internal_review' => \__( 'Referred for committee review.', 'allotment-manager-inspections' ),
+		];
+		$summary = $base[ $category ] ?? $status_base[ $status ] ?? \__( 'Inspection recorded.', 'allotment-manager-inspections' );
 		if ( $ticked ) {
 			$summary .= ' ' . \sprintf(
 				/* translators: %s: comma-separated list of ticked issues */

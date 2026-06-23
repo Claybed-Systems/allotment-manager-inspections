@@ -216,6 +216,9 @@ export async function updateFinding({ findingId, rating, notes, issues, exemptio
 		if (!m) throw new Error('Invalid rating: ' + rating);
 		payload.compliance_category = m.category;
 		payload.compliance_status   = m.status;
+		// Re-grading off an exemption — clear any prior committee note so it
+		// doesn't linger on a now-graded finding.
+		payload.committee_notes     = '';
 	}
 
 	if (issues && typeof issues === 'object') {

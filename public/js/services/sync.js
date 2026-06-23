@@ -30,7 +30,7 @@ export function getLastError() { return lastError; }
 // Build tag, baked into this module so the on-screen diagnostic proves at a
 // glance whether the device is actually running the latest code (vs a stale
 // HTTP-cached copy). Bump with the plugin version.
-export const BUILD = '1.3.0';
+export const BUILD = '1.4.0';
 
 /**
  * Full queue snapshot for the on-screen diagnostic (tap the status pill).
