@@ -124,27 +124,36 @@ export const getPlot = (roundId, plotId) => ajaxGet('am_inspect_get_plot', { rou
  *   has_derelict_structures, has_tenancy_breach (boolean) +
  *   tenancy_breach_description (string, only sent when truthy).
  */
-export async function saveFinding({ roundId, plotId, memberId, rating, notes, issues }) {
-	const ratingMap = {
-		1: { category: 'category_1', status: 'compliant',     requiresFollowup: 0 },
-		2: { category: 'category_2', status: 'non_compliant', requiresFollowup: 1 },
-		3: { category: 'category_3', status: 'non_compliant', requiresFollowup: 1 },
-	};
-	const m = ratingMap[rating];
-	if (!m) throw new Error('Invalid rating: ' + rating);
-
+export async function saveFinding({ roundId, plotId, memberId, rating, notes, issues, exemption, committeeNotes }) {
 	const today = new Date().toISOString().slice(0, 10);
 
 	const payload = {
-		round_id:             roundId,
-		plot_id:              plotId,
-		member_id:            memberId,
-		inspection_date:      today,
-		compliance_category:  m.category,
-		compliance_status:    m.status,
-		findings_summary:     notes || '',
-		requires_followup:    m.requiresFollowup,
+		round_id:         roundId,
+		plot_id:          plotId,
+		member_id:        memberId,
+		inspection_date:  today,
+		findings_summary: notes || '',
 	};
+
+	if (exemption === 'exempt' || exemption === 'internal_review') {
+		// Manual committee exemption / internal-review hold — not a graded
+		// verdict (no category); carry the committee-only note. Always sent so
+		// it can be cleared as well as set.
+		payload.compliance_status = exemption;
+		payload.requires_followup = 0;
+		payload.committee_notes   = committeeNotes || '';
+	} else {
+		const ratingMap = {
+			1: { category: 'category_1', status: 'compliant',     requiresFollowup: 0 },
+			2: { category: 'category_2', status: 'non_compliant', requiresFollowup: 1 },
+			3: { category: 'category_3', status: 'non_compliant', requiresFollowup: 1 },
+		};
+		const m = ratingMap[rating];
+		if (!m) throw new Error('Invalid rating: ' + rating);
+		payload.compliance_category = m.category;
+		payload.compliance_status   = m.status;
+		payload.requires_followup   = m.requiresFollowup;
+	}
 
 	if (issues && typeof issues === 'object') {
 		const booleanKeys = [
@@ -186,21 +195,31 @@ export async function saveFinding({ roundId, plotId, memberId, rating, notes, is
  * @param {string} args.notes
  * @param {Object} [args.issues] Same shape as saveFinding's issues.
  */
-export async function updateFinding({ findingId, rating, notes, issues }) {
-	const ratingMap = {
-		1: { category: 'category_1', status: 'compliant' },
-		2: { category: 'category_2', status: 'non_compliant' },
-		3: { category: 'category_3', status: 'non_compliant' },
-	};
-	const m = ratingMap[rating];
-	if (!m) throw new Error('Invalid rating: ' + rating);
-
+export async function updateFinding({ findingId, rating, notes, issues, exemption, committeeNotes }) {
 	const payload = {
-		finding_id:          findingId,
-		compliance_category: m.category,
-		compliance_status:   m.status,
-		findings_summary:    notes || '',
+		finding_id:       findingId,
+		findings_summary: notes || '',
 	};
+
+	if (exemption === 'exempt' || exemption === 'internal_review') {
+		// Re-classify to a committee exemption / review hold. No category;
+		// always carry the committee note so it can be cleared as well as set.
+		payload.compliance_status = exemption;
+		payload.committee_notes   = committeeNotes || '';
+	} else {
+		const ratingMap = {
+			1: { category: 'category_1', status: 'compliant' },
+			2: { category: 'category_2', status: 'non_compliant' },
+			3: { category: 'category_3', status: 'non_compliant' },
+		};
+		const m = ratingMap[rating];
+		if (!m) throw new Error('Invalid rating: ' + rating);
+		payload.compliance_category = m.category;
+		payload.compliance_status   = m.status;
+		// Re-grading off an exemption — clear any prior committee note so it
+		// doesn't linger on a now-graded finding.
+		payload.committee_notes     = '';
+	}
 
 	if (issues && typeof issues === 'object') {
 		const booleanKeys = [

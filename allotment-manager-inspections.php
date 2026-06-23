@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Plugin version.
  */
-define( 'AMI_VERSION', '1.3.0' );
+define( 'AMI_VERSION', '1.4.0' );
 
 /**
  * Plugin directory path.
