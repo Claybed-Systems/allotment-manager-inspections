@@ -257,7 +257,7 @@ final class Inspect_Ajax {
 		$issue_labels = [
 			'has_rubbish'             => \__( 'non-compostable rubbish', 'allotment-manager-inspections' ),
 			'has_overgrown_weeds'     => \__( 'overgrown weeds', 'allotment-manager-inspections' ),
-			'has_uncultivated_areas'  => \__( 'uncultivated areas', 'allotment-manager-inspections' ),
+			'has_uncultivated_areas'  => \__( 'essentially no cultivation visible', 'allotment-manager-inspections' ),
 			'has_derelict_structures' => \__( 'derelict structures', 'allotment-manager-inspections' ),
 			'has_tenancy_breach'      => \__( 'tenancy agreement breach', 'allotment-manager-inspections' ),
 		];
