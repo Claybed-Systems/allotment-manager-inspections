@@ -50,7 +50,8 @@
 // the background (never block save) with a "Wi-Fi only" setting (adds net.js).
 // 'v26' committee exemption / internal-review: inspector can mark a plot Exempt
 // or Internal review with a committee-only note (db 2.20.0).
-const VERSION = 'v26';
+// 'v27' label the Notes field as shown-to-the-member + factual placeholder.
+const VERSION = 'v27';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

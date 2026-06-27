@@ -202,7 +202,9 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 	const notes = document.createElement('textarea');
 	notes.className = 'ami-textarea';
 	notes.id = 'ami-notes';
-	notes.placeholder = 'Anything to remember about this plot…';
+	// The member reads this summary in their portal, so prompt for a factual
+	// description rather than a private memo (the committee-only note is below).
+	notes.placeholder = 'Describe the plot’s condition…';
 	notes.value = state.notes;
 	notes.addEventListener('input', () => { state.notes = notes.value; });
 	main.appendChild(notes);
