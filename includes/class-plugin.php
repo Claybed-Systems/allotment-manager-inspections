@@ -101,7 +101,7 @@ final class Plugin {
 				'cat3'          => \__( 'Cat 3', 'allotment-manager-inspections' ),
 				'list'          => \__( 'List', 'allotment-manager-inspections' ),
 				'map'           => \__( 'Map', 'allotment-manager-inspections' ),
-				'notes'         => \__( 'Notes', 'allotment-manager-inspections' ),
+				'notes'         => \__( 'Notes (shown to the member)', 'allotment-manager-inspections' ),
 				'tenant'        => \__( 'Tenant', 'allotment-manager-inspections' ),
 				'plot'          => \__( 'Plot', 'allotment-manager-inspections' ),
 				'progress'      => \__( '%d of %d inspected', 'allotment-manager-inspections' ),
