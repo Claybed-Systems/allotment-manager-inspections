@@ -18,6 +18,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Skip on PRs from forks: GitHub withholds the AMS_REPO_TOKEN secret from
+    # fork-triggered runs, so the private-repo checkout cannot succeed. Pushes
+    # (incl. to main) and same-repo PRs do have the secret. This avoids an
+    # unfixable red check on a fork / Dependabot PR.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     services:
       mysql:
