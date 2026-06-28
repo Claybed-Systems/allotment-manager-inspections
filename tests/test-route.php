@@ -134,6 +134,21 @@ class Test_Capabilities extends WP_UnitTestCase {
 		$this->assertTrue( $caps[ AMI_CAPABILITY ] ?? false, 'site manager must keep the inspector cap' );
 	}
 
+	public function test_edit_any_override_granted_to_every_committee_role(): void {
+		// v5: every committee inspector role can edit ANY finding, not only the
+		// chair, so committee members can correct / add photos to each other's
+		// inspections in the field.
+		foreach ( [ 'am_site_chair', 'am_site_secretary', 'am_site_manager', 'am_committee' ] as $role ) {
+			$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], $role );
+			$this->assertTrue( $caps[ Capabilities::EDIT_ANY_CAP ] ?? false, "$role must gain the edit-any-finding override" );
+		}
+	}
+
+	public function test_edit_any_override_not_granted_to_unrelated_roles(): void {
+		$caps = Capabilities::inject_inspector_cap( [ 'read' => true ], 'editor' );
+		$this->assertArrayNotHasKey( Capabilities::EDIT_ANY_CAP, $caps, 'a non-committee role must not gain the override' );
+	}
+
 	public function test_inspector_cap_is_hooked_into_am_role_capabilities(): void {
 		// The durable grant: without this hook a MemberManager ROLES_VERSION
 		// rebuild strips the inspector cap from the committee roles.
