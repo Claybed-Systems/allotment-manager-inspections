@@ -26,19 +26,17 @@ final class Capabilities {
 	 *
 	 * Every committee inspector role, not just the chair: committee members
 	 * routinely add photos to and correct each other's inspections in the field,
-	 * so any of them may edit a finding another inspector recorded. This is the
-	 * same set as default_roles() minus administrator (which is covered by
-	 * manage_options at the check site, so it is deliberately not listed here).
+	 * so any of them may edit a finding another inspector recorded. This is
+	 * exactly filter_roles() (default_roles() minus administrator, which is
+	 * covered by manage_options at the check site), returned as a SINGLE source
+	 * of truth: adding an inspector role to default_roles() then can't silently
+	 * leave it able to use the PWA but unable to edit another inspector's
+	 * finding.
 	 *
 	 * @return string[]
 	 */
 	private static function override_roles(): array {
-		return [
-			'am_site_chair',
-			'am_site_secretary',
-			'am_site_manager',
-			'am_committee',
-		];
+		return self::filter_roles();
 	}
 
 	/**
