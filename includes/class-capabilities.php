@@ -16,19 +16,29 @@ final class Capabilities {
 
 	/**
 	 * Capability that lets the holder edit ANY inspection finding (not only
-	 * their own). Granted to the chair; admins are covered by manage_options.
+	 * their own). Granted to every committee inspector role (see
+	 * override_roles()); admins are covered by manage_options.
 	 */
 	public const EDIT_ANY_CAP = 'edit_any_inspection_finding';
 
 	/**
-	 * Roles that receive the "edit any finding" override. The chair only —
-	 * administrator is covered by manage_options at the check site, so it is
-	 * deliberately not listed here.
+	 * Roles that receive the "edit any finding" override.
+	 *
+	 * Every committee inspector role, not just the chair: committee members
+	 * routinely add photos to and correct each other's inspections in the field,
+	 * so any of them may edit a finding another inspector recorded. This is the
+	 * same set as default_roles() minus administrator (which is covered by
+	 * manage_options at the check site, so it is deliberately not listed here).
 	 *
 	 * @return string[]
 	 */
 	private static function override_roles(): array {
-		return [ 'am_site_chair' ];
+		return [
+			'am_site_chair',
+			'am_site_secretary',
+			'am_site_manager',
+			'am_committee',
+		];
 	}
 
 	/**
