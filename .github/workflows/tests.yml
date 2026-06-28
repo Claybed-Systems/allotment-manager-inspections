@@ -1,0 +1,72 @@
+name: PHPUnit Tests
+
+# The inspections plugin's tests depend on the base allotment-manager plugin and
+# its member-manager dependency, which live in the PRIVATE ams monorepo. This
+# public repo's CI checks that repo out using a read-only token stored as the
+# secret AMS_REPO_TOKEN (a fine-grained PAT with Contents: Read on juettemann/ams,
+# or an equivalent classic PAT / deploy key). Until that secret exists the
+# "Checkout allotment-manager monorepo" step fails; everything else is standard.
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - name: Checkout inspections plugin (under test)
+        uses: actions/checkout@v4
+        with:
+          path: allotment-manager-inspections
+
+      - name: Checkout allotment-manager monorepo (AM + member-manager + phpunit)
+        uses: actions/checkout@v4
+        with:
+          repository: juettemann/ams
+          token: ${{ secrets.AMS_REPO_TOKEN }}
+          path: ams
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mysqli, zip, gd
+          coverage: none
+
+      - name: Install Composer dependencies (phpunit lives in the ams root vendor)
+        working-directory: ams
+        run: composer install --prefer-dist --no-progress
+
+      - name: Install WordPress test library
+        working-directory: ams
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
+        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 latest true
+
+      - name: Run inspections PHPUnit
+        working-directory: allotment-manager-inspections
+        env:
+          WP_TESTS_DIR: /tmp/wordpress-tests-lib
+          AM_PLUGIN_FILE: ${{ github.workspace }}/ams/wp-content/plugins/allotment-manager/allotment-manager.php
+          MM_PLUGIN_FILE: ${{ github.workspace }}/ams/wp-content/plugins/member-manager/member-manager.php
+        run: ${{ github.workspace }}/ams/vendor/bin/phpunit -c phpunit.xml --no-coverage
