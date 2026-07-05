@@ -58,6 +58,27 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 		return;
 	}
 
+	// The inspector can't inspect their OWN plot — the server's self-inspection
+	// guard rejects it ("Committee members cannot inspect their own plots"), so
+	// recording here would only fail and stick in the sync queue. Show a clear
+	// stop instead. An existing finding (recorded by someone else) is still shown
+	// so it can be viewed.
+	if (plot.isOwnPlot && !existing) {
+		mount.appendChild(renderHeader({
+			title: 'Plot ' + plot.plotNumber,
+			subtitle: 'Your plot',
+			showBack: true,
+			onBack: () => navigate('/round/' + roundId),
+		}));
+		const om = document.createElement('main');
+		om.className = 'ami-main';
+		om.innerHTML = '<div class="ami-empty"><p><strong>This is your own plot.</strong></p>'
+			+ '<p>Committee members can’t inspect their own plots. '
+			+ 'Ask another inspector to record this one.</p></div>';
+		mount.appendChild(om);
+		return;
+	}
+
 	// A new finding is always editable; an existing one only by a recorded
 	// inspector or the chair/admin (the server returns canEdit accordingly and
 	// re-checks on save — this just drives the UI).
@@ -492,7 +513,18 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 				window.alert('Couldn’t save the change: ' + ((e && e.message) ? e.message : 'unknown error'));
 				return;
 			}
-			// New finding failed online — queue and bail to the round view.
+			// A permanent server rejection (HTTP 400 — your own plot, a duplicate,
+			// or a vacant plot) will NEVER sync, so don't queue it: that's exactly
+			// how dead findings used to pile up invisibly in the queue. Show why and
+			// let the inspector act (fix it, or ask another inspector to record it).
+			if (e && e.code === 400) {
+				saveBtn.disabled = false;
+				saveBtn.textContent = s.save;
+				window.alert('Couldn’t save: ' + ((e && e.message) ? e.message : 'the server rejected this finding.'));
+				return;
+			}
+			// New finding failed for a transient reason (offline / server error) —
+			// queue and bail to the round view; the sync loop drains it later.
 			console.warn('Save failed, queueing', e);
 			const pending = await store.queueFinding({
 				roundId, plotId, memberId: plot.memberId, rating: state.rating, notes: state.notes,

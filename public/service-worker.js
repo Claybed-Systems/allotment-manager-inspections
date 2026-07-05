@@ -51,7 +51,10 @@
 // 'v26' committee exemption / internal-review: inspector can mark a plot Exempt
 // or Internal review with a committee-only note (db 2.20.0).
 // 'v27' label the Notes field as shown-to-the-member + factual placeholder.
-const VERSION = 'v27';
+// 'v28' sync no longer wedges: a finding the server permanently rejects (e.g.
+// the inspector's OWN plot) is skipped-and-surfaced instead of freezing every
+// good finding behind it; the editor blocks recording your own plot up front.
+const VERSION = 'v28';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

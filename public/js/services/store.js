@@ -69,6 +69,30 @@ export async function allPendingFindings() {
 	});
 }
 
+/**
+ * Annotate a queued finding with the reason the server permanently rejected it
+ * (HTTP 400 — e.g. the inspector's own plot, a duplicate, a vacant plot). The
+ * row is KEPT (nothing is lost); the queue view reads `lastRejection` to show
+ * which item is stuck and why. No-op if the row was drained in the meantime.
+ */
+export async function markFindingRejected(id, message) {
+	const t = await tx(['pending_findings'], 'readwrite');
+	const os = t.objectStore('pending_findings');
+	return new Promise((resolve, reject) => {
+		const g = os.get(id);
+		g.onsuccess = () => {
+			const row = g.result;
+			if (!row) return resolve(false);
+			row.lastRejection = message || 'Rejected';
+			row.rejectedAt = Date.now();
+			const p = os.put(row);
+			p.onsuccess = () => resolve(true);
+			p.onerror = () => reject(p.error);
+		};
+		g.onerror = () => reject(g.error);
+	});
+}
+
 export async function deletePendingFinding(id) {
 	const t = await tx(['pending_findings'], 'readwrite');
 	return new Promise((resolve, reject) => {

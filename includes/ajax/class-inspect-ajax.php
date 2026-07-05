@@ -391,6 +391,7 @@ final class Inspect_Ajax {
 					p.section,
 					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
 					asg.start_date AS assignment_start_date,
+					m.user_id AS holder_user_id,
 					m.first_name,
 					m.last_name,
 					mo.latitude,
@@ -421,6 +422,7 @@ final class Inspect_Ajax {
 					p.section,
 					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
 					asg.start_date AS assignment_start_date,
+					m.user_id AS holder_user_id,
 					m.first_name,
 					m.last_name,
 					mo.latitude,
@@ -499,6 +501,11 @@ final class Inspect_Ajax {
 			// member); a new tenant is shown flagged "exempt" (the server
 			// auto-exempts them, so it's recordable but no notice is issued).
 			'isVacant'          => 0 === $member_id,
+			// The plot is the LOGGED-IN inspector's own: the server's
+			// self-inspection guard (Inspection_Finding::create_finding) will
+			// reject a finding on it, so the app must block recording up front
+			// rather than let it fail and stick in the sync queue.
+			'isOwnPlot'         => self::holder_is_current_user( $row ),
 			'isNewTenant'       => self::is_new_tenant( $member_id, $start_date ),
 			'tenantStartDate'   => $start_date,
 			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
@@ -580,6 +587,24 @@ final class Inspect_Ajax {
 	}
 
 	/**
+	 * Whether the plot's current holder is the logged-in inspector — i.e. it's
+	 * their OWN plot. Mirrors the server-side self-inspection guard in
+	 * Inspection_Finding::create_finding (which compares the member's linked WP
+	 * user id against the inspector), so the field UI can refuse to record it up
+	 * front instead of queuing a finding the server will always reject. Reads the
+	 * resolved holder's WP user id (`holder_user_id`, from the members join); 0 /
+	 * absent when the plot is vacant or the member has no linked WP account.
+	 *
+	 * @param object $row Row carrying `holder_user_id` from the holder join.
+	 * @return bool
+	 */
+	private static function holder_is_current_user( $row ): bool {
+		$holder_uid  = ! empty( $row->holder_user_id ) ? (int) $row->holder_user_id : 0;
+		$current_uid = \get_current_user_id();
+		return $holder_uid > 0 && $current_uid > 0 && $holder_uid === $current_uid;
+	}
+
+	/**
 	 * Tile-layer config for the Map view. Resolved via the same
 	 * `am_map_tile_layer` filter the main plugin's maps use, so an admin's
 	 * paid-tile-provider override applies here too. Shape mirrors what
@@ -634,6 +659,7 @@ final class Inspect_Ajax {
 					p.section,
 					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
 					asg.start_date AS assignment_start_date,
+					m.user_id AS holder_user_id,
 					m.first_name,
 					m.last_name,
 					m.email,
@@ -732,6 +758,9 @@ final class Inspect_Ajax {
 					// inspectable client-side; new tenant → shown flagged, the
 					// server auto-exempts so no notice is issued.
 					'isVacant'          => 0 === $effective_member_id,
+					// Own-plot guard — see holder_is_current_user(). The finding
+					// editor blocks recording when true (mirrors the vacant block).
+					'isOwnPlot'         => self::holder_is_current_user( $row ),
 					'isNewTenant'       => self::is_new_tenant( $effective_member_id, $start_date ),
 					'tenantStartDate'   => $start_date,
 				],

@@ -78,9 +78,15 @@ export async function render(_params, { mount, navigate }) {
 			h.textContent = 'Findings waiting (' + findings.length + ')';
 			main.appendChild(h);
 			for (const f of findings) {
+				// A finding the server keeps rejecting (e.g. the inspector's own
+				// plot) carries the reason — show it so it's obvious WHICH item is
+				// stuck and why, instead of a generic "waiting".
+				const sub = f.lastRejection
+					? '⚠ Can’t be saved: ' + f.lastRejection
+					: (f.notes ? f.notes : '(no notes — a summary is filled in automatically)');
 				main.appendChild(row(
 					'Plot #' + f.plotId + ' · rating ' + f.rating,
-					f.notes ? f.notes : '(no notes — a summary is filled in automatically)',
+					sub,
 					async () => { await store.deletePendingFinding(f.id); draw(); }
 				));
 			}
