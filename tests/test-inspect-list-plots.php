@@ -176,6 +176,75 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 		$this->assertNull( $out['memberId'] );
 	}
 
+	public function test_own_plot_flagged_when_holder_is_current_user(): void {
+		// The holder's linked WP user IS the logged-in inspector → their own plot.
+		// The finding editor blocks recording it (the server's self-inspection
+		// guard would reject the finding and it would stick in the sync queue).
+		$uid = self::factory()->user->create();
+		wp_set_current_user( $uid );
+
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'   => 42,
+					'effective_member_id' => 42,
+					'holder_user_id'      => $uid,
+				)
+			)
+		);
+
+		$this->assertTrue( $out['isOwnPlot'] );
+		$this->assertFalse( $out['isVacant'] );
+		wp_set_current_user( 0 );
+	}
+
+	public function test_other_members_plot_not_flagged_own(): void {
+		$me    = self::factory()->user->create();
+		$other = self::factory()->user->create();
+		wp_set_current_user( $me );
+
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'effective_member_id' => 42,
+					'holder_user_id'      => $other,
+				)
+			)
+		);
+
+		$this->assertFalse( $out['isOwnPlot'] );
+		wp_set_current_user( 0 );
+	}
+
+	public function test_vacant_plot_not_flagged_own(): void {
+		$me = self::factory()->user->create();
+		wp_set_current_user( $me );
+
+		// No holder_user_id (vacant / no linked WP account) must never be "own".
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_member_id'   => null,
+					'effective_member_id' => null,
+					'first_name'          => null,
+					'last_name'           => null,
+				)
+			)
+		);
+
+		$this->assertFalse( $out['isOwnPlot'] );
+		wp_set_current_user( 0 );
+	}
+
+	public function test_own_plot_never_true_for_logged_out_context(): void {
+		// current_user_id() === 0 must not collide with an absent/0 holder id.
+		wp_set_current_user( 0 );
+
+		$out = $this->call_format( $this->row( array( 'holder_user_id' => 7 ) ) );
+
+		$this->assertFalse( $out['isOwnPlot'] );
+	}
+
 	public function test_tile_config_is_well_formed(): void {
 		$tile = $this->call_tile_config();
 

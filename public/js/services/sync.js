@@ -30,7 +30,7 @@ export function getLastError() { return lastError; }
 // Build tag, baked into this module so the on-screen diagnostic proves at a
 // glance whether the device is actually running the latest code (vs a stale
 // HTTP-cached copy). Bump with the plugin version.
-export const BUILD = '1.4.0';
+export const BUILD = '1.4.4';
 
 /**
  * Full queue snapshot for the on-screen diagnostic (tap the status pill).
@@ -76,6 +76,14 @@ export async function syncOnce({ forcePhotos = false } = {}) {
 		let drained = 0;
 
 		const findings = await store.allPendingFindings();
+		// Findings the server PERMANENTLY rejected (HTTP 400 — e.g. the plot is
+		// the inspector's own, a duplicate, or vacant). Retrying never helps, so
+		// they must NOT wedge the good findings behind them in the queue. (The old
+		// code `break`-ed on ANY error, so one such record froze the whole rest of
+		// the queue — the Vinery-round bug where 4 self-inspection findings held 4
+		// valid ones hostage.) Skip past them, annotate the row, and drain the rest.
+		let rejectedCount = 0;
+		let firstRejection = null;
 		for (const f of findings) {
 			try {
 				const result = await api.saveFinding({
@@ -103,10 +111,24 @@ export async function syncOnce({ forcePhotos = false } = {}) {
 				await store.deletePendingFinding(f.id);
 				drained++;
 			} catch (e) {
-				// Stop draining findings if the server is reachable but rejected.
-				// Photos for this finding stay queued tagged with pendingFindingId.
+				// HTTP 400 = a per-record validation rejection (self-inspection,
+				// duplicate, vacant plot…). It will never succeed as-is, so record
+				// WHY on the row (the queue view surfaces it) and move on to the
+				// next finding rather than freezing the queue.
+				if (e && e.code === 400) {
+					rejectedCount++;
+					const why = (e && e.message) ? e.message : 'Rejected by the server';
+					if (!firstRejection) firstRejection = why;
+					try { await store.markFindingRejected(f.id, why); } catch (_) { /* non-fatal */ }
+					console.warn('Sync: finding permanently rejected, skipping', e);
+					continue;
+				}
+				// 403 (token/permission), 5xx, or the server being unreachable is a
+				// whole-queue condition — stop and retry the batch later rather than
+				// hammer every remaining record now. Photos for the un-synced
+				// findings stay queued tagged with pendingFindingId.
 				lastError = (e && e.message) ? e.message : 'Sync failed';
-				console.warn('Sync: finding failed', e);
+				console.warn('Sync: finding failed — will retry the batch later', e);
 				break;
 			}
 		}
@@ -146,6 +168,15 @@ export async function syncOnce({ forcePhotos = false } = {}) {
 				console.warn('Sync: photo failed', e);
 				break;
 			}
+		}
+
+		// Permanently-rejected findings need a human — most often because they're
+		// the inspector's OWN plots (self-inspection is blocked), so another
+		// committee member has to record them. Surface that distinctly from a
+		// transient wedge; the row keeps its data so nothing is lost.
+		if (!lastError && rejectedCount > 0) {
+			lastError = rejectedCount + ' finding(s) can’t be saved from this device: '
+				+ firstRejection + ' Open the queue to see which plots.';
 		}
 
 		// Orphaned photos would otherwise sit "waiting" forever with no error.
