@@ -40,12 +40,12 @@ jobs:
 
     steps:
       - name: Checkout inspections plugin (under test)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: allotment-manager-inspections
 
       - name: Checkout allotment-manager monorepo (AM + member-manager + phpunit)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: juettemann/ams
           token: ${{ secrets.AMS_REPO_TOKEN }}
