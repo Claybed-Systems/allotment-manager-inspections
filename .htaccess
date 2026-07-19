@@ -1,0 +1,86 @@
+# Field Inspector — plugin root security.
+#
+# Blocks public access to internal plugin files. Until this file existed,
+# directory listing was ON for the deployed plugin: both the plugin root and
+# tests/ enumerated their contents over HTTP, and phpunit.xml and
+# ATTRIBUTIONS.md were readable.
+#
+# This repository is public, so the source is not secret and this is not
+# pretending otherwise. What it buys is worth having anyway: no directory
+# enumeration of a live install, no test/CI configuration served from a
+# production host, and the same posture as the sibling plugins this one is
+# deployed alongside.
+#
+# ── DO NOT BREAK THE PWA ──────────────────────────────────────────────────
+# public/ is genuinely public and must stay fetchable in full:
+#
+#   public/service-worker.js     registered with scope '/inspect/', which only
+#                                works because public/.htaccess sends
+#                                Service-Worker-Allowed: /
+#   public/manifest.webmanifest  the web app manifest. NOTE the extension —
+#                                it is NOT .json, so the json rule below does
+#                                not touch it. Do not "tidy" webmanifest into
+#                                that list.
+#   public/js/**                 app.js imports these by BARE path with no
+#                                ?ver, so every one must resolve
+#   public/css/**, public/icons/**
+#   public/vendor/leaflet/**     third-party map library, loaded by the browser
+#
+# The `^vendor/` rule below is scoped to the PLUGIN ROOT. RewriteRule patterns
+# match relative to the directory holding this file, so public/vendor/ presents
+# as "public/vendor/…" and is NOT matched. There is no root vendor/ today; the
+# rule is future-proofing.
+#
+# public/.htaccess sets the cache and service-worker headers and is unaffected
+# by this file.
+
+# Directory listing was enabled — this is the rule that closes it.
+Options -Indexes
+
+# Development, configuration and CI files.
+# Deliberately absent: js, css, png, webmanifest, txt.
+# readme.txt is the standard WordPress plugin readme and is conventionally
+# readable, so it is left alone.
+<FilesMatch "\.(json|xml|lock|md|log|sql|env|yml|yaml|dist|neon|pem|key|crt|cer|p12|pfx|sh|py)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Hidden files (.gitignore, .editorconfig, .phpunit.result.cache, …).
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Internal directories.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^tests/ - [F,L]
+    RewriteRule ^\.github/ - [F,L]
+
+    # includes/ is PHP-only and is never fetched over HTTP. Blocking the
+    # directory as well as the .php extension means a data file of any
+    # extension added here later cannot quietly become readable.
+    RewriteRule ^includes/ - [F,L]
+
+    # Plugin-root vendor only — see the note above about public/vendor/.
+    RewriteRule ^vendor/ - [F,L]
+</IfModule>
+
+# Every PHP file except the plugin bootstrap, which WordPress must resolve.
+# public/views/shell.php is include()d by includes/class-route.php, never
+# fetched over HTTP, so blocking it costs nothing.
+<FilesMatch "\.php$">
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteCond %{REQUEST_FILENAME} !allotment-manager-inspections\.php$
+        RewriteRule \.php$ - [F,L]
+    </IfModule>
+</FilesMatch>
+
+# The static assets the app actually loads.
+<FilesMatch "\.(css|js|webmanifest|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
