@@ -47,7 +47,11 @@ jobs:
       - name: Checkout allotment-manager monorepo (AM + member-manager + phpunit)
         uses: actions/checkout@v7
         with:
-          repository: juettemann/ams
+          # The monorepo moved to the Claybed-Systems org on 2026-07-22. Git
+          # redirects survive a move, but actions/checkout asks the REST API for
+          # the default branch BEFORE cloning, and that lookup 404s on the old
+          # path — so every run in this repo failed from the move onwards.
+          repository: Claybed-Systems/ams
           token: ${{ secrets.AMS_REPO_TOKEN }}
           path: ams
 
