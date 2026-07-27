@@ -347,8 +347,8 @@ final class Inspect_Ajax {
 	 * GET ?action=am_inspect_list_plots&round_id=N
 	 *
 	 * For a primary round: all plots in r.site_section.
-	 * For a followup round: only plots that had category_2 or category_3 in the
-	 * parent round.
+	 * For a followup round: only the plots the parent round flagged for
+	 * re-inspection — see {@see fetch_plot_rows()}.
 	 *
 	 * @return void
 	 */
@@ -361,10 +361,7 @@ final class Inspect_Ajax {
 		}
 
 		global $wpdb;
-		$rounds_table   = $wpdb->prefix . 'am_inspection_rounds';
-		$plots_table    = $wpdb->prefix . 'am_plots';
-		$findings_table = $wpdb->prefix . 'am_inspection_findings';
-		$map_obj_table  = $wpdb->prefix . 'am_map_objects';
+		$rounds_table = $wpdb->prefix . 'am_inspection_rounds';
 
 		// Load round meta.
 		$round = $wpdb->get_row(
@@ -374,15 +371,72 @@ final class Inspect_Ajax {
 			\wp_send_json_error( [ 'message' => \__( 'Round not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
 
+		$rows = self::fetch_plot_rows( $round );
+
+		$plots = array_map( [ self::class, 'format_plot_row' ], $rows );
+
+		$tile = self::tile_config();
+
+		\wp_send_json_success(
+			[
+				'round' => [
+					'id'             => (int) $round->id,
+					'roundNumber'    => $round->round_number,
+					'siteSection'    => $round->site_section,
+					'inspectionType' => $round->inspection_type,
+					'parentRoundId'  => $round->parent_round_id ? (int) $round->parent_round_id : null,
+					'status'         => $round->status,
+				],
+				'plots' => $plots,
+				'map'   => [ 'tile' => $tile ],
+			]
+		);
+	}
+
+	/**
+	 * The plots in scope for a round.
+	 *
+	 * Primary round: every plot in the round's site_section.
+	 *
+	 * Follow-up round: ONLY the plots the parent round flagged for
+	 * re-inspection. The second visit of a season exists to re-check what failed
+	 * the first time; every other plot is deliberately absent from the list, not
+	 * merely de-emphasised.
+	 *
+	 * "Flagged" is `prev.requires_followup = 1` — the flag the finding itself
+	 * carries, set by Inspection_Finding whenever a finding is recorded
+	 * non-compliant. It is NOT `compliance_category IN ('category_2',
+	 * 'category_3')`, which is what this query used until #39 and which is the
+	 * wrong axis: category measures CULTIVATION (Category 1 is >= 75% cultivated)
+	 * and is independent of compliance status, so a plot failed for rubbish,
+	 * derelict structures, or a tenancy breach while being well cultivated is
+	 * Category 1 and was silently dropped from its own follow-up round. There was
+	 * one such plot in the live 2026 round. `compliance_category` is also
+	 * nullable, so a non-compliant finding recorded without a cultivation
+	 * percentage vanished the same way.
+	 *
+	 * Voided findings are excluded: a finding is voided when the membership ends
+	 * mid-round, so there is no live non-compliance left to re-inspect and the
+	 * plot must not be dragged into the follow-up on a departed member's record.
+	 *
+	 * @since #39
+	 * @param object $round Round row: id, site_section, inspection_type, parent_round_id.
+	 * @return array<int,object> Plot rows for format_plot_row().
+	 */
+	private static function fetch_plot_rows( object $round ): array {
+		global $wpdb;
+		$plots_table    = $wpdb->prefix . 'am_plots';
+		$findings_table = $wpdb->prefix . 'am_inspection_findings';
+		$map_obj_table  = $wpdb->prefix . 'am_map_objects';
+
 		// Resolve each plot's current holder from the active tenancy assignment
 		// (rather than the stale-prone current_member_id). Shared with get_plot so
 		// the list and the detail view always resolve holders identically — see
 		// holder_join_sql() for the full rationale. Exposes `asg` + members alias `m`.
 		$holder_join = self::holder_join_sql();
 
-		// Build the plot list. For a followup round we INNER JOIN against the
-		// parent round's findings (only plots that scored 2 or 3 then are in
-		// scope now). For a primary round we list all plots in the section.
+		$round_id = (int) $round->id;
+
 		if ( 'followup' === $round->inspection_type && $round->parent_round_id ) {
 			$sql = $wpdb->prepare(
 				"SELECT
@@ -408,9 +462,10 @@ final class Inspect_Ajax {
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE prev.round_id = %d
-				  AND prev.compliance_category IN ('category_2', 'category_3')
+				  AND prev.requires_followup = 1
+				  AND prev.voided_at IS NULL
 				  AND (p.deleted_at IS NULL)
-				ORDER BY p.plot_number",
+				ORDER BY LENGTH(p.plot_number), p.plot_number",
 				$round_id,
 				(int) $round->parent_round_id
 			);
@@ -449,24 +504,7 @@ final class Inspect_Ajax {
 		$rows = $wpdb->get_results( $sql );
 		// phpcs:enable
 
-		$plots = array_map( [ self::class, 'format_plot_row' ], $rows ?: [] );
-
-		$tile = self::tile_config();
-
-		\wp_send_json_success(
-			[
-				'round' => [
-					'id'             => (int) $round->id,
-					'roundNumber'    => $round->round_number,
-					'siteSection'    => $round->site_section,
-					'inspectionType' => $round->inspection_type,
-					'parentRoundId'  => $round->parent_round_id ? (int) $round->parent_round_id : null,
-					'status'         => $round->status,
-				],
-				'plots' => $plots,
-				'map'   => [ 'tile' => $tile ],
-			]
-		);
+		return $rows ?: [];
 	}
 
 	/**

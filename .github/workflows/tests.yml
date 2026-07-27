@@ -3,9 +3,12 @@ name: PHPUnit Tests
 # The inspections plugin's tests depend on the base allotment-manager plugin and
 # its member-manager dependency, which live in the PRIVATE ams monorepo. This
 # public repo's CI checks that repo out using a read-only token stored as the
-# secret AMS_REPO_TOKEN (a fine-grained PAT with Contents: Read on juettemann/ams,
-# or an equivalent classic PAT / deploy key). Until that secret exists the
-# "Checkout allotment-manager monorepo" step fails; everything else is standard.
+# secret AMS_REPO_TOKEN: a fine-grained PAT whose RESOURCE OWNER is the
+# Claybed-Systems org (not a personal account — a fine-grained PAT is bound to
+# one owner and cannot reach another's repos) with Contents: Read on
+# Claybed-Systems/ams. Until that secret is valid the "Checkout
+# allotment-manager monorepo" step fails with an opaque REST "Not Found";
+# everything else is standard. The current token expires 2027-07-28.
 
 on:
   pull_request:
@@ -47,7 +50,11 @@ jobs:
       - name: Checkout allotment-manager monorepo (AM + member-manager + phpunit)
         uses: actions/checkout@v7
         with:
-          repository: juettemann/ams
+          # The monorepo moved to the Claybed-Systems org on 2026-07-22. Git
+          # redirects survive a move, but actions/checkout asks the REST API for
+          # the default branch BEFORE cloning, and that lookup 404s on the old
+          # path — so every run in this repo failed from the move onwards.
+          repository: Claybed-Systems/ams
           token: ${{ secrets.AMS_REPO_TOKEN }}
           path: ams
 
