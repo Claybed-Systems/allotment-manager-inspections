@@ -135,6 +135,15 @@ export async function render({ roundId, plotId }, { mount, navigate }) {
 		main.appendChild(nt);
 	}
 
+	// On a follow-up, what the FIRST round found. This is the work the tenant was
+	// asked to do, so it is what the inspector is standing there to verify —
+	// without it they are judging the plot on its own, not against a work order.
+	// Rendered above the form, collapsed by default so it informs without
+	// pushing the actual controls off a phone screen.
+	if (data.previousFinding) {
+		main.appendChild(renderPreviousFinding(data.previousFinding));
+	}
+
 	// Existing finding: show who recorded it + the edit affordance / warning.
 	if (existing) {
 		const banner = document.createElement('div');
@@ -581,4 +590,104 @@ function escapeHtml(str) {
 }
 function escapeAttr(str) {
 	return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/**
+ * The first round's result, as a panel above the form.
+ *
+ * A follow-up asks one question: was the required work done? The inspector
+ * cannot answer it from the plot alone — they need to know what was wrong in
+ * the first place. Until #43 the app carried only the previous CATEGORY on the
+ * list ("Cat 3"), which says how bad it was rather than what to look at, and
+ * the detail screen carried nothing at all.
+ *
+ * So this shows the work order: the issues that were ticked, the summary the
+ * member was given, and the photographs from the day. A <details> element so it
+ * can be collapsed once read, open by default because on a follow-up it is the
+ * reason the inspector is standing there.
+ *
+ * @param {object} prev The previousFinding payload from get_plot.
+ * @returns {HTMLElement}
+ */
+function renderPreviousFinding(prev) {
+	const wrap = document.createElement('details');
+	wrap.className = 'ami-prev-finding';
+	wrap.open = true;
+
+	const ISSUE_LABELS = {
+		rubbish: 'Rubbish',
+		overgrownWeeds: 'Overgrown weeds',
+		uncultivatedAreas: 'Uncultivated areas',
+		derelictStructures: 'Derelict structures',
+		tenancyBreach: 'Tenancy breach',
+	};
+	const ticked = Object.keys(ISSUE_LABELS).filter((k) => prev.issues && prev.issues[k]);
+
+	const date = prev.inspectionDate ? formatShortDate(prev.inspectionDate) : '';
+	const ratingLabel = { category_1: 'Pass', category_2: 'Minor issues', category_3: 'Major issues' }[prev.category]
+		|| (prev.status === 'compliant' ? 'Pass' : 'Not compliant');
+
+	const summaryEl = document.createElement('summary');
+	summaryEl.className = 'ami-prev-finding__summary';
+	summaryEl.innerHTML = `<strong>First round: ${escapeHtml(ratingLabel)}</strong>`
+		+ (date ? ` · ${escapeHtml(date)}` : '')
+		+ (prev.isVoided ? ' · <em>voided</em>' : '');
+	wrap.appendChild(summaryEl);
+
+	const body = document.createElement('div');
+	body.className = 'ami-prev-finding__body';
+	let html = '';
+
+	if (ticked.length) {
+		html += '<span class="ami-prev-finding__caption">Work required</span><div>'
+			+ ticked.map((k) => `<span class="ami-chip ami-chip--issue">${escapeHtml(ISSUE_LABELS[k])}</span>`).join('')
+			+ '</div>';
+	}
+	if (prev.tenancyBreachDescription) {
+		html += `<p class="ami-prev-finding__text">${escapeHtml(prev.tenancyBreachDescription)}</p>`;
+	}
+	if (prev.summary) {
+		html += '<span class="ami-prev-finding__caption">What the member was told</span>'
+			+ `<p class="ami-prev-finding__text">${escapeHtml(prev.summary)}</p>`;
+	}
+	if (!ticked.length && !prev.summary) {
+		html += '<p class="ami-prev-finding__text ami-prev-finding__text--muted">No details were recorded beyond the rating.</p>';
+	}
+	body.innerHTML = html;
+
+	// Photos from the first round: the before-picture to hold the plot against.
+	// Built with DOM calls rather than innerHTML so a caption from the database
+	// cannot reach the markup as an attribute.
+	if (prev.photos && prev.photos.length) {
+		const caption = document.createElement('span');
+		caption.className = 'ami-prev-finding__caption';
+		caption.textContent = `Photos from the first round (${prev.photos.length})`;
+		body.appendChild(caption);
+
+		const strip = document.createElement('div');
+		strip.className = 'ami-prev-finding__photos';
+		for (const p of prev.photos) {
+			const link = document.createElement('a');
+			link.href = p.url || p.thumbnailUrl || '#';
+			link.target = '_blank';
+			link.rel = 'noopener';
+			link.className = 'ami-prev-finding__photo';
+			const img = document.createElement('img');
+			img.loading = 'lazy';
+			img.alt = p.caption || 'First-round photo';
+			img.src = p.thumbnailUrl || p.url;
+			link.appendChild(img);
+			strip.appendChild(link);
+		}
+		body.appendChild(strip);
+	}
+
+	wrap.appendChild(body);
+	return wrap;
+}
+
+/** dd/mm/yyyy from a Y-m-d (or datetime) string, without pulling in a date library. */
+function formatShortDate(value) {
+	const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+	return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value);
 }

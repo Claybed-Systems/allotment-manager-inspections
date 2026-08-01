@@ -54,7 +54,11 @@
 // 'v28' sync no longer wedges: a finding the server permanently rejects (e.g.
 // the inspector's OWN plot) is skipped-and-surfaced instead of freezing every
 // good finding behind it; the editor blocks recording your own plot up front.
-const VERSION = 'v28';
+// 'v29' a follow-up round lists the WHOLE section, with the plots that passed
+// the first round faded and not inspectable — walking from V3 to V47 past forty
+// plots that were not on the list made the round hard to navigate. Progress
+// still counts only the plots being re-inspected.
+const VERSION = 'v29';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

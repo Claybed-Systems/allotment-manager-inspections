@@ -3,7 +3,7 @@
  * Plugin Name: Allotment Manager - Field Inspector
  * Plugin URI: https://github.com/juettemann/allotment-manager-inspections
  * Description: Mobile-first PWA for committee members to record plot inspections in the field. Depends on the main Allotment Manager plugin for data, AJAX handlers and Google Drive photo storage.
- * Version: 1.4.3
+ * Version: 1.5.0
  * Author: Thomas Juettemann
  * Author URI: https://juettemann.co.uk
  * License: GPL v2 or later
@@ -22,8 +22,14 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Plugin version.
+ *
+ * Busts the JS/CSS module URLs (see shell.php + Route), so it MUST be bumped
+ * with any front-end change or phones keep serving the cached app. Keep it in
+ * step with the `Version:` header above — the two had drifted (1.4.3 vs 1.4.4)
+ * and the header is the one WordPress shows on the Plugins screen, while this
+ * one is what the app displays and what actually busts the cache.
  */
-define( 'AMI_VERSION', '1.4.4' );
+define( 'AMI_VERSION', '1.5.0' );
 
 /**
  * Plugin directory path.
