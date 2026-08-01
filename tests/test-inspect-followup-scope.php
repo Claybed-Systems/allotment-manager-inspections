@@ -281,6 +281,70 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->assertSame( array( 'B5', 'B6' ), $this->plot_numbers_for( $this->primary_round( 100 ) ) );
 	}
 
+	// ---- plot order (#42) ---------------------------------------------------
+
+	/**
+	 * The live complaint. Ordering by `LENGTH(plot_number), plot_number` bucketed
+	 * by digit count, so on the 2026 Vinery round the inspector got V1…V97 and
+	 * THEN every subdivided plot, because "V3.1" is four characters and "V97" is
+	 * three. A subdivided plot belongs at its own number.
+	 */
+	public function test_subdivided_plots_sort_at_their_number_not_after_the_section(): void {
+		foreach ( array( 'B97', 'B3.2', 'B2', 'B3.1', 'B4', 'B95' ) as $number ) {
+			$this->create_plot( $number );
+		}
+
+		$this->assertSame(
+			array( 'B2', 'B3.1', 'B3.2', 'B4', 'B95', 'B97' ),
+			$this->plot_numbers_for( $this->primary_round( 100 ) )
+		);
+	}
+
+	/**
+	 * The property the length-based sort DID get right, which must survive:
+	 * numbers compare as numbers, so B9 precedes B10.
+	 */
+	public function test_numbers_still_sort_numerically(): void {
+		foreach ( array( 'B10', 'B9', 'B100', 'B2' ) as $number ) {
+			$this->create_plot( $number );
+		}
+
+		$this->assertSame(
+			array( 'B2', 'B9', 'B10', 'B100' ),
+			$this->plot_numbers_for( $this->primary_round( 100 ) )
+		);
+	}
+
+	/**
+	 * An undivided plot leads its own halves, because a missing subdivision
+	 * counts as 0 rather than sorting as text.
+	 */
+	public function test_the_whole_plot_leads_its_subdivisions(): void {
+		foreach ( array( 'B3.2', 'B3', 'B3.1' ) as $number ) {
+			$this->create_plot( $number );
+		}
+
+		$this->assertSame(
+			array( 'B3', 'B3.1', 'B3.2' ),
+			$this->plot_numbers_for( $this->primary_round( 100 ) )
+		);
+	}
+
+	/**
+	 * A follow-up round's list is ordered by the same rule, so an inspector sees
+	 * one ordering whichever visit they are on.
+	 */
+	public function test_the_followup_list_uses_the_same_order(): void {
+		foreach ( array( 'B97', 'B3.2', 'B3.1' ) as $number ) {
+			$this->create_finding( 100, $this->create_plot( $number ), 'non_compliant', 'category_3', 1 );
+		}
+
+		$this->assertSame(
+			array( 'B3.1', 'B3.2', 'B97' ),
+			$this->plot_numbers_for( $this->followup_round( 100 ) )
+		);
+	}
+
 	// ---- the unscoped-follow-up guard (#40) --------------------------------
 
 	private function is_unscoped( object $round ): bool {

@@ -403,6 +403,42 @@ final class Inspect_Ajax {
 	}
 
 	/**
+	 * ORDER BY fragment that sorts plot numbers the way an inspector walks them.
+	 *
+	 * The list was ordered by `LENGTH(plot_number), plot_number`, which buckets
+	 * by how many characters the number has and only then compares text. So on
+	 * the live 2026 Vinery round the inspector was handed V1…V97 followed by
+	 * every subdivided plot — V3.1, V3.2, V15.1, V83.2 — because "V3.1" is four
+	 * characters and "V97" is three. The halves were in the right order relative
+	 * to each other, and in completely the wrong place on the round (#42).
+	 *
+	 * A plot number is a letter prefix, a whole number, and optionally a
+	 * subdivision after a dot. So it sorts on those three keys, the numbers
+	 * compared as numbers:
+	 *
+	 *   V1, V2, V3, V3.1, V3.2, V4 … V9, V10 … V97
+	 *
+	 * A missing subdivision counts as 0, so an undivided plot leads its own
+	 * halves. This mirrors `am_plot_number_order_sql()` in the main plugin,
+	 * which is the same rule for the admin lists — the inspector and the
+	 * committee should not see two different orders for one section.
+	 *
+	 * SUBSTRING_INDEX rather than a lookbehind regex: both hosts run MariaDB
+	 * 10.11 while CI runs MySQL 8, and they differ on REGEXP_SUBSTR lookbehind.
+	 *
+	 * @since #42
+	 * @param string $column Fully-qualified column. Code-supplied, never user input.
+	 * @return string SQL fragment for an ORDER BY list.
+	 */
+	private static function plot_number_order_sql( string $column = 'p.plot_number' ): string {
+		$numeric_part = "REGEXP_REPLACE({$column}, '^[^0-9]+', '')";
+
+		return "REGEXP_REPLACE({$column}, '[^A-Za-z].*$', '') ASC, "
+			. "CAST(SUBSTRING_INDEX({$numeric_part}, '.', 1) AS UNSIGNED) ASC, "
+			. "CAST(IF({$column} LIKE '%.%', SUBSTRING_INDEX({$column}, '.', -1), '0') AS UNSIGNED) ASC";
+	}
+
+	/**
 	 * Whether a round claims to be a follow-up but has no scope to resolve.
 	 *
 	 * A follow-up's plot list IS its parent's flagged findings, reached through
@@ -456,6 +492,9 @@ final class Inspect_Ajax {
 	 * caller checks it, not this method, so the failure is an explicit error to
 	 * the inspector rather than an empty list they would read as "nothing to do".
 	 *
+	 * Ordering is {@see plot_number_order_sql()}, NOT the list's original
+	 * `LENGTH(plot_number), plot_number`. See that method for why.
+	 *
 	 * @since #39
 	 * @param object $round Round row: id, site_section, inspection_type, parent_round_id.
 	 * @return array<int,object> Plot rows for format_plot_row().
@@ -502,7 +541,7 @@ final class Inspect_Ajax {
 				  AND prev.requires_followup = 1
 				  AND prev.voided_at IS NULL
 				  AND (p.deleted_at IS NULL)
-				ORDER BY LENGTH(p.plot_number), p.plot_number",
+				ORDER BY " . self::plot_number_order_sql(),
 				$round_id,
 				(int) $round->parent_round_id
 			);
@@ -531,7 +570,7 @@ final class Inspect_Ajax {
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
 				WHERE p.section = %s
 				  AND (p.deleted_at IS NULL)
-				ORDER BY LENGTH(p.plot_number), p.plot_number",
+				ORDER BY " . self::plot_number_order_sql(),
 				$round_id,
 				$round->site_section
 			);
