@@ -281,7 +281,7 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->assertSame( array( 'B5', 'B6' ), $this->plot_numbers_for( $this->primary_round( 100 ) ) );
 	}
 
-	// ---- plot order (#41) ---------------------------------------------------
+	// ---- plot order (#42) ---------------------------------------------------
 
 	/**
 	 * The live complaint. Ordering by `LENGTH(plot_number), plot_number` bucketed

@@ -410,7 +410,7 @@ final class Inspect_Ajax {
 	 * the live 2026 Vinery round the inspector was handed V1…V97 followed by
 	 * every subdivided plot — V3.1, V3.2, V15.1, V83.2 — because "V3.1" is four
 	 * characters and "V97" is three. The halves were in the right order relative
-	 * to each other, and in completely the wrong place on the round (#41).
+	 * to each other, and in completely the wrong place on the round (#42).
 	 *
 	 * A plot number is a letter prefix, a whole number, and optionally a
 	 * subdivision after a dot. So it sorts on those three keys, the numbers
@@ -426,7 +426,7 @@ final class Inspect_Ajax {
 	 * SUBSTRING_INDEX rather than a lookbehind regex: both hosts run MariaDB
 	 * 10.11 while CI runs MySQL 8, and they differ on REGEXP_SUBSTR lookbehind.
 	 *
-	 * @since #41
+	 * @since #42
 	 * @param string $column Fully-qualified column. Code-supplied, never user input.
 	 * @return string SQL fragment for an ORDER BY list.
 	 */
