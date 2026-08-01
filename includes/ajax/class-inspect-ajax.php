@@ -85,6 +85,22 @@ final class Inspect_Ajax {
 			\wp_send_json_error( [ 'message' => \__( 'Inspections module unavailable.', 'allotment-manager-inspections' ) ], 500 );
 		}
 
+		// A follow-up round's list now carries the WHOLE section so the inspector
+		// can orient themselves (#43), which means it also carries plots that are
+		// not being re-inspected. The app renders those unclickable, but the app
+		// is an offline PWA: a cached page from before this change, or a queued
+		// finding recorded against a stale list, would post here regardless. So
+		// scope is enforced on the server and the faded row is only an affordance.
+		if ( ! self::plot_is_in_scope( $round_id, $plot_id ) ) {
+			\wp_send_json_error(
+				[
+					'message' => \__( 'This plot passed the first round, so it is not part of this follow-up. It is shown for orientation only.', 'allotment-manager-inspections' ),
+					'code'    => 'plot_not_in_scope',
+				],
+				400
+			);
+		}
+
 		$category = isset( $_POST['compliance_category'] ) ? \sanitize_key( $_POST['compliance_category'] ) : '';
 		$status   = isset( $_POST['compliance_status'] ) ? \sanitize_key( $_POST['compliance_status'] ) : '';
 		$notes    = isset( $_POST['findings_summary'] ) ? \sanitize_textarea_field( \wp_unslash( $_POST['findings_summary'] ) ) : '';
@@ -439,6 +455,193 @@ final class Inspect_Ajax {
 	}
 
 	/**
+	 * A round's type + parent, or null when it cannot be read.
+	 *
+	 * Shared by the save-scope guard and the previous-finding lookup so the two
+	 * always agree on what "the parent round" means for a given round.
+	 *
+	 * @since #43
+	 * @param int $round_id Round id.
+	 * @return object|null Row with inspection_type and parent_round_id.
+	 */
+	private static function round_scope( int $round_id ): ?object {
+		global $wpdb;
+
+		$rounds_table = $wpdb->prefix . 'am_inspection_rounds';
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT inspection_type, parent_round_id FROM {$rounds_table} WHERE id = %d", $round_id )
+		);
+
+		return $row ?: null;
+	}
+
+	/**
+	 * The FIRST round's finding for this plot, with its photographs.
+	 *
+	 * A follow-up exists to check that required work was done, which the
+	 * inspector cannot judge without knowing what was wrong. The plot list
+	 * carried only the previous CATEGORY ("Cat 3"), which says how bad it was,
+	 * not what to look at — and the detail screen carried nothing at all, so an
+	 * inspector standing on the plot had to remember or ring someone (#43).
+	 *
+	 * So this returns what the work order actually was: the summary the member
+	 * was told, the specific issues ticked, and the photographs taken at the
+	 * time. The photos are the useful part on site — a before-and-after against
+	 * what they are looking at.
+	 *
+	 * Returns null for a primary round (there is no previous), for an unscoped
+	 * follow-up, and for a plot the parent never recorded.
+	 *
+	 * @since #43
+	 * @param int $round_id The CURRENT round.
+	 * @param int $plot_id  Plot being opened.
+	 * @return array<string,mixed>|null Previous finding for the API response.
+	 */
+	private static function previous_finding( int $round_id, int $plot_id ): ?array {
+		global $wpdb;
+
+		$round = self::round_scope( $round_id );
+		if ( ! $round || 'followup' !== $round->inspection_type || empty( $round->parent_round_id ) ) {
+			return null;
+		}
+
+		$findings_table = $wpdb->prefix . 'am_inspection_findings';
+
+		$prev = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id, compliance_category, compliance_status, findings_summary,
+					has_rubbish, has_overgrown_weeds, has_uncultivated_areas,
+					has_derelict_structures, has_tenancy_breach, tenancy_breach_description,
+					cultivation_percentage, inspection_date, inspector_names, voided_at
+				FROM {$findings_table}
+				WHERE plot_id = %d AND round_id = %d
+				LIMIT 1",
+				$plot_id,
+				(int) $round->parent_round_id
+			)
+		);
+
+		if ( ! $prev ) {
+			return null;
+		}
+
+		return [
+			'id'                 => (int) $prev->id,
+			'category'           => $prev->compliance_category,
+			'status'             => $prev->compliance_status,
+			'summary'            => $prev->findings_summary,
+			'inspectionDate'     => $prev->inspection_date,
+			'recordedBy'         => $prev->inspector_names ?: null,
+			'cultivationPercent' => null !== $prev->cultivation_percentage ? (float) $prev->cultivation_percentage : null,
+			// The specific issues that had to be put right. This IS the work
+			// order, so it is what the follow-up is checking against.
+			'issues'             => [
+				'rubbish'           => (bool) $prev->has_rubbish,
+				'overgrownWeeds'    => (bool) $prev->has_overgrown_weeds,
+				'uncultivatedAreas' => (bool) $prev->has_uncultivated_areas,
+				'derelictStructures'=> (bool) $prev->has_derelict_structures,
+				'tenancyBreach'     => (bool) $prev->has_tenancy_breach,
+			],
+			'tenancyBreachDescription' => $prev->tenancy_breach_description ?: null,
+			// Voided means the membership ended mid-round. The plot is then out of
+			// scope, but if it is somehow being viewed the state must be visible
+			// rather than presented as a live work order.
+			'isVoided'           => ! empty( $prev->voided_at ),
+			'photos'             => self::finding_photos( (int) $prev->id ),
+		];
+	}
+
+	/**
+	 * A finding's photographs, oldest first.
+	 *
+	 * Extracted so the current finding and the previous one are shaped
+	 * identically for the app (#43).
+	 *
+	 * @since #43
+	 * @param int $finding_id Finding id.
+	 * @return array<int,array<string,mixed>> Photo rows.
+	 */
+	private static function finding_photos( int $finding_id ): array {
+		global $wpdb;
+
+		$photos_table = $wpdb->prefix . 'am_inspection_photos';
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, google_drive_url, google_drive_thumbnail_url, photo_caption, photo_order
+				FROM {$photos_table}
+				WHERE finding_id = %d AND deleted_at IS NULL
+				ORDER BY photo_order ASC, id ASC",
+				$finding_id
+			)
+		);
+
+		return array_map(
+			static fn( $p ) => [
+				'id'           => (int) $p->id,
+				'url'          => $p->google_drive_url,
+				'thumbnailUrl' => $p->google_drive_thumbnail_url,
+				'caption'      => $p->photo_caption,
+				'order'        => (int) $p->photo_order,
+			],
+			$rows ?: []
+		);
+	}
+
+	/**
+	 * Whether a plot may be recorded against on a given round.
+	 *
+	 * Everything in the section is in scope for a primary round. For a follow-up
+	 * only the plots its parent FLAGGED are — the rest appear in the list purely
+	 * so the inspector can orient themselves while walking (#43), and recording
+	 * against one would put a finding on a plot that passed the first round.
+	 *
+	 * "Flagged" is the same predicate the list and the denominator use:
+	 * `requires_followup = 1` on a non-voided finding of the parent round. Any
+	 * change here must move in step with fetch_plot_rows() and with the main
+	 * plugin's `count_followup_scope_plots()`, or the three disagree about what
+	 * the round covers.
+	 *
+	 * Fails OPEN for a round that cannot be read at all (missing row): that is
+	 * not a scope decision, and Inspection_Finding::create_finding() will reject
+	 * an invalid round on its own with a better message.
+	 *
+	 * @since #43
+	 * @param int $round_id Round being recorded against.
+	 * @param int $plot_id  Plot being recorded.
+	 * @return bool True when a finding may be recorded.
+	 */
+	private static function plot_is_in_scope( int $round_id, int $plot_id ): bool {
+		global $wpdb;
+
+		$round = self::round_scope( $round_id );
+
+		if ( ! $round || 'followup' !== $round->inspection_type ) {
+			return true;
+		}
+
+		// An unscoped follow-up has no in-scope plots at all; list_plots() already
+		// refuses to serve one (#42), so nothing can legitimately be recorded.
+		if ( empty( $round->parent_round_id ) ) {
+			return false;
+		}
+
+		$findings_table = $wpdb->prefix . 'am_inspection_findings';
+
+		return (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$findings_table}
+				WHERE round_id = %d AND plot_id = %d
+				  AND requires_followup = 1 AND voided_at IS NULL
+				LIMIT 1",
+				(int) $round->parent_round_id,
+				$plot_id
+			)
+		);
+	}
+
+	/**
 	 * Whether a round claims to be a follow-up but has no scope to resolve.
 	 *
 	 * A follow-up's plot list IS its parent's flagged findings, reached through
@@ -514,6 +717,26 @@ final class Inspect_Ajax {
 		$round_id = (int) $round->id;
 
 		if ( 'followup' === $round->inspection_type && $round->parent_round_id ) {
+			// The whole section, with `in_scope` marking the plots the parent
+			// flagged. A follow-up still only RE-INSPECTS the flagged plots — the
+			// rest ride along faded and non-inspectable purely so the inspector can
+			// place themselves while walking (#43). Getting from V3 to V47 past
+			// forty plots that are not on the list is the problem this solves.
+			//
+			// So this is a LEFT JOIN to `prev`, not the INNER JOIN it replaced, and
+			// scope moves from the WHERE clause into the `in_scope` column. Every
+			// consumer of scope must now read that column: the plot list fades the
+			// row, the map dashes it, save_finding() refuses it, and the progress
+			// count ignores it. A follow-up's denominator is still the flagged
+			// count, NOT the section (#850, #860) — that is the whole reason the
+			// flag travels per-row instead of the query simply widening.
+			//
+			// `OR prev.id IS NOT NULL` keeps a flagged plot in its own follow-up
+			// even if its section no longer matches the round's. Section equality
+			// is enforced when a round is created (#866), so this only catches
+			// legacy or hand-edited data — but silently dropping a plot from its
+			// own follow-up is the exact bug #40 was about, and it must not come
+			// back through a side door.
 			$sql = $wpdb->prepare(
 				"SELECT
 					p.id,
@@ -531,19 +754,23 @@ final class Inspect_Ajax {
 					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
-					prev.compliance_category AS previous_category
-				FROM {$findings_table} prev
-				INNER JOIN {$plots_table} p ON p.id = prev.plot_id
+					prev.compliance_category AS previous_category,
+					(prev.id IS NOT NULL) AS in_scope
+				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
 				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
-				WHERE prev.round_id = %d
-				  AND prev.requires_followup = 1
-				  AND prev.voided_at IS NULL
+				LEFT JOIN {$findings_table} prev
+					ON prev.plot_id = p.id
+					AND prev.round_id = %d
+					AND prev.requires_followup = 1
+					AND prev.voided_at IS NULL
+				WHERE (p.section = %s OR prev.id IS NOT NULL)
 				  AND (p.deleted_at IS NULL)
 				ORDER BY " . self::plot_number_order_sql(),
 				$round_id,
-				(int) $round->parent_round_id
+				(int) $round->parent_round_id,
+				$round->site_section
 			);
 		} else {
 			$sql = $wpdb->prepare(
@@ -563,7 +790,8 @@ final class Inspect_Ajax {
 					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
-					NULL AS previous_category
+					NULL AS previous_category,
+					1 AS in_scope
 				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
@@ -625,6 +853,13 @@ final class Inspect_Ajax {
 			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
 			'currentCategory'   => $row->current_category,   // category_1|2|3 or null
 			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
+			// Whether this plot is actually being re-inspected on THIS round. On a
+			// follow-up the list carries the whole section so the inspector can
+			// orient themselves, but only the plots the parent flagged are in
+			// scope; the rest are shown faded and are not recordable (#43).
+			// Always true on a primary round. Defaults true for older-shaped rows
+			// so a caller that predates the column is not silently un-scoped.
+			'inScope'           => ! isset( $row->in_scope ) || (bool) $row->in_scope,
 			// Plot footprint from the admin Map Editor (wp_am_map_objects): the
 			// centroid plus the box width/height (pixels at zoom 19) and rotation
 			// (degrees). The map draws the plot's real rotated rectangle from
@@ -759,7 +994,6 @@ final class Inspect_Ajax {
 		global $wpdb;
 		$plots_table    = $wpdb->prefix . 'am_plots';
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
-		$photos_table   = $wpdb->prefix . 'am_inspection_photos';
 
 		// Resolve the holder from the active assignment (see holder_join_sql) so a
 		// freshly-assigned tenant shows by name and the correct member_id flows
@@ -803,28 +1037,7 @@ final class Inspect_Ajax {
 			)
 		);
 
-		$photos = [];
-		if ( $finding ) {
-			$photo_rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT id, google_drive_url, google_drive_thumbnail_url, photo_caption, photo_order
-					FROM {$photos_table}
-					WHERE finding_id = %d AND deleted_at IS NULL
-					ORDER BY photo_order ASC, id ASC",
-					(int) $finding->id
-				)
-			);
-			$photos = array_map(
-				static fn( $p ) => [
-					'id'           => (int) $p->id,
-					'url'          => $p->google_drive_url,
-					'thumbnailUrl' => $p->google_drive_thumbnail_url,
-					'caption'      => $p->photo_caption,
-					'order'        => (int) $p->photo_order,
-				],
-				$photo_rows ?: []
-			);
-		}
+		$photos = $finding ? self::finding_photos( (int) $finding->id ) : [];
 
 		// Edit policy + warn metadata for an existing finding. A finding may be
 		// edited by one of its recorded inspectors, or by chair/admin (the
@@ -907,6 +1120,11 @@ final class Inspect_Ajax {
 						'editedAt'   => $edited_at,
 				] : null,
 				'photos'  => $photos,
+				// On a follow-up, what the FIRST round found — the work the tenant
+				// was asked to do, with its photographs. Null on a primary round.
+				// The inspector cannot verify that required work was done without
+				// it (#43).
+				'previousFinding' => self::previous_finding( $round_id, $plot_id ),
 			]
 		);
 	}

@@ -778,6 +778,92 @@ body {
 }
 .ami-plot-row--vacant:active { transform: none; }
 
+/* Out-of-scope plot row — on a follow-up, a plot the first round passed. Listed
+   so the inspector can place themselves while walking the site, not to be
+   worked on. Faded harder than a vacant row: on a follow-up these are usually
+   the MAJORITY of the list, so the few plots actually being re-inspected have
+   to carry the eye. Rendered as a div, so it is not clickable or focusable. */
+.ami-plot-row--out-of-scope {
+	cursor: default;
+	opacity: 0.45;
+	background: transparent;
+}
+.ami-plot-row--out-of-scope:active { transform: none; }
+
+/* First-round result panel on a follow-up's finding screen — the work order the
+   inspector is verifying against. Quiet enough not to compete with the rating
+   buttons, present enough to be read before them. */
+.ami-prev-finding {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--ami-border);
+	border-radius: 10px;
+	background: var(--ami-muted);
+}
+.ami-prev-finding__summary {
+	cursor: pointer;
+	font-size: 14px;
+	color: var(--ami-fg);
+	list-style: revert; /* keep the native disclosure triangle */
+}
+.ami-prev-finding__body { margin-top: 8px; }
+.ami-prev-finding__caption {
+	display: block;
+	margin: 8px 0 4px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ami-fg-soft);
+}
+.ami-prev-finding__text {
+	margin: 0 0 4px;
+	font-size: 14px;
+	line-height: 1.45;
+	white-space: pre-wrap; /* keep the inspector's line breaks */
+}
+.ami-prev-finding__text--muted { color: var(--ami-fg-soft); }
+.ami-chip--issue {
+	margin: 0 6px 6px 0;
+	background: #fdecec;
+	color: #8a2b2b;
+}
+/* Thumbnail strip: scrolls sideways so a long set never pushes the form down. */
+.ami-prev-finding__photos {
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	padding-bottom: 4px;
+	-webkit-overflow-scrolling: touch;
+}
+.ami-prev-finding__photo {
+	flex: 0 0 auto;
+	display: block;
+	width: 96px;
+	height: 96px;
+	border-radius: 8px;
+	overflow: hidden;
+	border: 1px solid var(--ami-border);
+	background: var(--ami-card);
+}
+.ami-prev-finding__photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+/* Explains what the faded rows are, above a follow-up's plot list. */
+.ami-scope-note {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--ami-muted);
+	color: var(--ami-fg-soft);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
 /* Inline chips next to a plot's tenant name. */
 .ami-chip {
 	display: inline-block;
@@ -794,6 +880,14 @@ body {
 	color: #1f5d8a;
 }
 .ami-chip--vacant {
+	background: var(--ami-card);
+	color: var(--ami-fg-soft);
+	border: 1px solid var(--ami-border);
+	font-weight: 600;
+}
+/* Why an out-of-scope row is inert: it passed the first round. Deliberately
+   quiet — it labels the backdrop, it is not a result being reported. */
+.ami-chip--passed {
 	background: var(--ami-card);
 	color: var(--ami-fg-soft);
 	border: 1px solid var(--ami-border);

@@ -50,6 +50,8 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 			'map_objects' => $wpdb->prefix . 'am_map_objects',
 			'assignments' => $wpdb->prefix . 'am_plot_assignments',
 			'members'     => $wpdb->prefix . 'mm_members',
+			'rounds'      => $wpdb->prefix . 'am_inspection_rounds',
+			'photos'      => $wpdb->prefix . 'am_inspection_photos',
 		);
 
 		// Only the columns the plot-list query reads, and column names/types that
@@ -65,6 +67,11 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				deleted_at datetime DEFAULT NULL,
 				PRIMARY KEY (id)
 			)",
+			// The has_* / description / date columns are here for
+			// previous_finding(), which reads the first round's WORK ORDER (#43).
+			// They matter more than they look: CI creates these fixture tables
+			// against a bare WordPress with no main-plugin schema, so a column
+			// missing here is a query error in CI only — green locally, red there.
 			'findings'    => "(
 				id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				round_id bigint(20) UNSIGNED NOT NULL,
@@ -73,8 +80,28 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				compliance_category varchar(30) DEFAULT NULL,
 				findings_summary text,
 				inspector_user_ids text,
+				inspector_names varchar(255) DEFAULT NULL,
+				inspection_date date DEFAULT NULL,
+				cultivation_percentage decimal(5,2) DEFAULT NULL,
+				has_rubbish tinyint(1) DEFAULT NULL,
+				has_overgrown_weeds tinyint(1) DEFAULT NULL,
+				has_uncultivated_areas tinyint(1) DEFAULT NULL,
+				has_derelict_structures tinyint(1) DEFAULT NULL,
+				has_tenancy_breach tinyint(1) DEFAULT NULL,
+				tenancy_breach_description text,
 				requires_followup tinyint(1) NOT NULL DEFAULT 0,
 				voided_at datetime DEFAULT NULL,
+				PRIMARY KEY (id)
+			)",
+			// finding_photos() joins here for the first round's before-pictures.
+			'photos'      => "(
+				id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				finding_id bigint(20) UNSIGNED NOT NULL,
+				google_drive_url varchar(500) DEFAULT NULL,
+				google_drive_thumbnail_url varchar(500) DEFAULT NULL,
+				photo_caption varchar(255) DEFAULT NULL,
+				photo_order int(11) NOT NULL DEFAULT 0,
+				deleted_at datetime DEFAULT NULL,
 				PRIMARY KEY (id)
 			)",
 			'map_objects' => "(
@@ -102,6 +129,23 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				user_id bigint(20) UNSIGNED DEFAULT NULL,
 				first_name varchar(100) DEFAULT NULL,
 				last_name varchar(100) DEFAULT NULL,
+				PRIMARY KEY (id)
+			)",
+			// Only what plot_is_in_scope() reads, plus round_number. The list-scope
+			// tests pass round rows in by hand; the save-guard has to look one up
+			// for itself.
+			//
+			// round_number is here because the REAL table carries it NOT NULL with
+			// a UNIQUE key, and wpdb strips STRICT_TRANS_TABLES — so an insert that
+			// omits it silently writes '' and the SECOND fixture round collides on
+			// the unique index rather than erroring. The failure then looks like a
+			// scope bug (round not found, guard fails open) rather than a fixture
+			// one, which is exactly how it presented.
+			'rounds'      => "(
+				id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				round_number varchar(50) NOT NULL DEFAULT '',
+				inspection_type varchar(20) NOT NULL DEFAULT 'primary',
+				parent_round_id bigint(20) UNSIGNED DEFAULT NULL,
 				PRIMARY KEY (id)
 			)",
 		);
@@ -215,22 +259,28 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->assertSame( array( 'B166' ), $this->plot_numbers_for( $this->followup_round( 100 ) ) );
 	}
 
-	public function test_compliant_plot_is_not_listed(): void {
+	/**
+	 * Since #43 the list carries the whole section, so "not re-inspected" is
+	 * expressed as out-of-SCOPE rather than absent. The plot is still visible;
+	 * it just is not work. These assert the scope predicate, which is the thing
+	 * that decides what gets re-inspected, counted and recorded.
+	 */
+	public function test_compliant_plot_is_not_in_scope(): void {
 		$plot = $this->create_plot( 'B167' );
 		$this->create_finding( 100, $plot, 'compliant', 'category_1', 0 );
 
-		$this->assertSame( array(), $this->plot_numbers_for( $this->followup_round( 100 ) ) );
+		$this->assertSame( array( 'B167' => false ), $this->scope_map_for( $this->followup_round( 100 ) ) );
 	}
 
 	/**
 	 * Voided = the membership ended mid-round. Nothing live to re-inspect, and
-	 * the plot must not reappear on a departed member's record.
+	 * the plot must not be worked on a departed member's record.
 	 */
-	public function test_voided_finding_is_not_listed(): void {
+	public function test_voided_finding_is_not_in_scope(): void {
 		$plot = $this->create_plot( 'B168' );
 		$this->create_finding( 100, $plot, 'non_compliant', 'category_3', 1, '2026-07-01 09:00:00' );
 
-		$this->assertSame( array(), $this->plot_numbers_for( $this->followup_round( 100 ) ) );
+		$this->assertSame( array( 'B168' => false ), $this->scope_map_for( $this->followup_round( 100 ) ) );
 	}
 
 	public function test_deleted_plot_is_not_listed(): void {
@@ -240,20 +290,27 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->plot_numbers_for( $this->followup_round( 100 ) ) );
 	}
 
+	/**
+	 * Another round's flags do not put a plot in scope here. It is still listed
+	 * — everything in the section is — but as context, not work.
+	 */
 	public function test_only_the_parent_rounds_flags_count(): void {
 		$mine   = $this->create_plot( 'B170' );
 		$others = $this->create_plot( 'B171' );
 		$this->create_finding( 100, $mine, 'non_compliant', 'category_3', 1 );
 		$this->create_finding( 999, $others, 'non_compliant', 'category_3', 1 );
 
-		$this->assertSame( array( 'B170' ), $this->plot_numbers_for( $this->followup_round( 100 ) ) );
+		$this->assertSame(
+			array( 'B170' => true, 'B171' => false ),
+			$this->scope_map_for( $this->followup_round( 100 ) )
+		);
 	}
 
 	/**
-	 * Every flagged plot, whatever its cultivation category, in natural
-	 * plot-number order.
+	 * Every flagged plot is in scope whatever its cultivation category, and the
+	 * one that passed rides along out of scope, all in natural plot-number order.
 	 */
-	public function test_lists_every_flagged_plot_across_categories(): void {
+	public function test_every_flagged_plot_is_in_scope_across_categories(): void {
 		$c3 = $this->create_plot( 'B2' );
 		$c2 = $this->create_plot( 'B10' );
 		$c1 = $this->create_plot( 'B3' );
@@ -264,9 +321,9 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->create_finding( 100, $ok, 'compliant', 'category_1', 0 );
 
 		$this->assertSame(
-			array( 'B2', 'B3', 'B10' ),
-			$this->plot_numbers_for( $this->followup_round( 100 ) ),
-			'flagged plots only, shortest-first natural order'
+			array( 'B2' => true, 'B3' => true, 'B4' => false, 'B10' => true ),
+			$this->scope_map_for( $this->followup_round( 100 ) ),
+			'flagged plots in scope whatever the category; order stays natural'
 		);
 	}
 
@@ -279,6 +336,387 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->create_finding( 100, $a, 'non_compliant', 'category_3', 1 );
 
 		$this->assertSame( array( 'B5', 'B6' ), $this->plot_numbers_for( $this->primary_round( 100 ) ) );
+	}
+
+	// ---- the whole section, with scope flagged (#43) ------------------------
+
+	/**
+	 * @return array<string,bool> plot_number => inScope, in list order.
+	 */
+	private function scope_map_for( object $round ): array {
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'fetch_plot_rows' );
+		$m->setAccessible( true );
+		$format = new ReflectionMethod( Inspect_Ajax::class, 'format_plot_row' );
+		$format->setAccessible( true );
+
+		$out = array();
+		foreach ( $m->invoke( null, $round ) as $row ) {
+			$formatted = $format->invoke( null, $row );
+			$out[ (string) $formatted['plotNumber'] ] = $formatted['inScope'];
+		}
+		return $out;
+	}
+
+	/**
+	 * A follow-up now lists the WHOLE section, not only the flagged plots. The
+	 * flagged-only list made the round hard to navigate: walking from V3 to V47
+	 * past forty plots that were not on the list left the inspector with nothing
+	 * to place themselves against.
+	 */
+	public function test_followup_lists_the_whole_section_with_scope_flagged(): void {
+		$flagged = $this->create_plot( 'B1' );
+		$this->create_plot( 'B2' );
+		$this->create_plot( 'B3' );
+		$this->create_finding( 100, $flagged, 'non_compliant', 'category_3', 1 );
+
+		$this->assertSame(
+			array( 'B1' => true, 'B2' => false, 'B3' => false ),
+			$this->scope_map_for( $this->followup_round( 100 ) ),
+			'every plot is listed; only the flagged one is in scope'
+		);
+	}
+
+	/**
+	 * A plot that PASSED the first round is present but out of scope — that is
+	 * the whole point: it is context, not work.
+	 */
+	public function test_a_plot_that_passed_is_listed_but_out_of_scope(): void {
+		$passed = $this->create_plot( 'B7' );
+		$this->create_finding( 100, $passed, 'compliant', 'category_1', 0 );
+
+		$this->assertSame( array( 'B7' => false ), $this->scope_map_for( $this->followup_round( 100 ) ) );
+	}
+
+	/**
+	 * A voided finding does not put its plot in scope — the membership ended, so
+	 * there is no live non-compliance to re-inspect. It still appears in the
+	 * list, faded, like any other plot in the section.
+	 */
+	public function test_a_voided_finding_leaves_the_plot_listed_but_out_of_scope(): void {
+		$plot = $this->create_plot( 'B8' );
+		$this->create_finding( 100, $plot, 'non_compliant', 'category_3', 1, '2026-07-01 09:00:00' );
+
+		$this->assertSame( array( 'B8' => false ), $this->scope_map_for( $this->followup_round( 100 ) ) );
+	}
+
+	/**
+	 * A primary round has no out-of-scope plots: everything in the section is
+	 * being inspected.
+	 */
+	public function test_every_plot_is_in_scope_on_a_primary_round(): void {
+		$this->create_plot( 'B1' );
+		$this->create_plot( 'B2' );
+
+		$this->assertSame(
+			array( 'B1' => true, 'B2' => true ),
+			$this->scope_map_for( $this->primary_round( 100 ) )
+		);
+	}
+
+	/**
+	 * Section equality is enforced when a round is created, but a flagged plot
+	 * must never fall out of its OWN follow-up if the data says otherwise —
+	 * dropping a flagged plot is the bug #40 was about, and it must not return
+	 * through the section filter.
+	 */
+	public function test_a_flagged_plot_in_another_section_is_still_listed(): void {
+		global $wpdb;
+		$wpdb->insert(
+			self::$tables['plots'],
+			array( 'plot_number' => 'V9', 'section' => 'Vinery', 'deleted_at' => null )
+		);
+		$stray = (int) $wpdb->insert_id;
+		$this->create_finding( 100, $stray, 'non_compliant', 'category_3', 1 );
+
+		$scope = $this->scope_map_for( $this->followup_round( 100 ) );
+
+		$this->assertArrayHasKey( 'V9', $scope, 'a flagged plot stays in its own follow-up' );
+		$this->assertTrue( $scope['V9'] );
+	}
+
+	/**
+	 * A deleted plot is gone from the list whether flagged or not.
+	 */
+	public function test_deleted_plots_are_not_listed(): void {
+		$this->create_plot( 'B4', '2026-07-01 09:00:00' );
+		$this->create_plot( 'B5' );
+
+		$this->assertSame( array( 'B5' => false ), $this->scope_map_for( $this->followup_round( 100 ) ) );
+	}
+
+	// ---- the save guard (#43) -----------------------------------------------
+
+	/**
+	 * @param string   $type      'primary' or 'followup'.
+	 * @param int|null $parent_id Parent round for a follow-up.
+	 * @return int Round id.
+	 */
+	private int $round_seq = 0;
+
+	private function insert_round( string $type, ?int $parent_id = null, int $id = 0 ): int {
+		global $wpdb;
+		$data = array(
+			// Unique per fixture round: the real table's round_number is NOT NULL
+			// with a UNIQUE key. See the DDL note.
+			'round_number'    => 'FIXTURE-' . $type . '-' . ( ++$this->round_seq ),
+			'inspection_type' => $type,
+			'parent_round_id' => $parent_id,
+		);
+		if ( $id > 0 ) {
+			$data['id'] = $id;
+		}
+		$wpdb->insert( self::$tables['rounds'], $data );
+		$this->assertSame( '', $wpdb->last_error, 'round fixture insert: ' . $wpdb->last_error );
+
+		return $id > 0 ? $id : (int) $wpdb->insert_id;
+	}
+
+	private function in_scope( int $round_id, int $plot_id ): bool {
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'plot_is_in_scope' );
+		$m->setAccessible( true );
+		return (bool) $m->invoke( null, $round_id, $plot_id );
+	}
+
+	/**
+	 * The list renders an out-of-scope plot unclickable, but the app is an
+	 * offline PWA: a page cached before #43, or a finding queued against a stale
+	 * list, still posts. So scope is enforced on the server and the fade is only
+	 * an affordance.
+	 */
+	public function test_a_plot_that_passed_cannot_be_recorded_on_a_followup(): void {
+		$passed   = $this->create_plot( 'B20' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $passed, 'compliant', 'category_1', 0 );
+
+		$this->assertFalse( $this->in_scope( $followup, $passed ) );
+	}
+
+	public function test_a_flagged_plot_can_be_recorded_on_a_followup(): void {
+		$flagged  = $this->create_plot( 'B21' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $flagged, 'non_compliant', 'category_3', 1 );
+
+		$this->assertTrue( $this->in_scope( $followup, $flagged ) );
+	}
+
+	/**
+	 * A voided flag is not a live one, so the plot cannot be recorded against
+	 * either — the same predicate the list and the denominator use.
+	 */
+	public function test_a_voided_flag_does_not_permit_recording(): void {
+		$plot     = $this->create_plot( 'B22' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1, '2026-07-01 09:00:00' );
+
+		$this->assertFalse( $this->in_scope( $followup, $plot ) );
+	}
+
+	/**
+	 * Everything in the section is recordable on a primary round — the guard
+	 * must not leak into the round type it does not apply to.
+	 */
+	public function test_every_plot_is_recordable_on_a_primary_round(): void {
+		$plot    = $this->create_plot( 'B23' );
+		$primary = $this->insert_round( 'primary' );
+
+		$this->assertTrue( $this->in_scope( $primary, $plot ) );
+	}
+
+	/**
+	 * An unscoped follow-up has no in-scope plots at all. list_plots() already
+	 * refuses to serve one (#42), so nothing can legitimately be recorded.
+	 */
+	public function test_nothing_is_recordable_on_a_parentless_followup(): void {
+		$plot     = $this->create_plot( 'B24' );
+		$followup = $this->insert_round( 'followup', null );
+
+		$this->assertFalse( $this->in_scope( $followup, $plot ) );
+	}
+
+	/**
+	 * A round that cannot be read is not a scope decision — fail open and let
+	 * create_finding() reject the invalid round with a better message.
+	 */
+	public function test_an_unknown_round_is_left_to_the_model(): void {
+		$plot = $this->create_plot( 'B25' );
+
+		$this->assertTrue( $this->in_scope( 999999, $plot ) );
+	}
+
+	// ---- the first round's result, on the follow-up screen (#43) ------------
+
+	/**
+	 * @return array<string,mixed>|null
+	 */
+	private function previous_finding_for( int $round_id, int $plot_id ): ?array {
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'previous_finding' );
+		$m->setAccessible( true );
+		return $m->invoke( null, $round_id, $plot_id );
+	}
+
+	/**
+	 * The requirement: an inspector on a follow-up has to be able to verify that
+	 * the required work was done, which means seeing what was wrong. The
+	 * previous CATEGORY alone ("Cat 3") says how bad it was, not what to look at.
+	 */
+	public function test_the_followup_screen_carries_the_first_rounds_work_order(): void {
+		global $wpdb;
+		$plot     = $this->create_plot( 'B30' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1 );
+		$wpdb->update(
+			self::$tables['findings'],
+			array( 'has_rubbish' => 1, 'has_overgrown_weeds' => 1, 'findings_summary' => 'Bindweed across the western beds; clear the rubbish by the shed.' ),
+			array( 'plot_id' => $plot, 'round_id' => $parent )
+		);
+
+		$prev = $this->previous_finding_for( $followup, $plot );
+
+		$this->assertIsArray( $prev );
+		$this->assertSame( 'category_3', $prev['category'] );
+		$this->assertStringContainsString( 'Bindweed', (string) $prev['summary'] );
+		$this->assertTrue( $prev['issues']['rubbish'], 'the ticked issues ARE the work order' );
+		$this->assertTrue( $prev['issues']['overgrownWeeds'] );
+		$this->assertFalse( $prev['issues']['derelictStructures'] );
+	}
+
+	/**
+	 * A primary round has no previous result to show.
+	 */
+	public function test_a_primary_round_has_no_previous_finding(): void {
+		$plot    = $this->create_plot( 'B31' );
+		$primary = $this->insert_round( 'primary' );
+		$this->create_finding( $primary, $plot, 'non_compliant', 'category_3', 1 );
+
+		$this->assertNull( $this->previous_finding_for( $primary, $plot ) );
+	}
+
+	/**
+	 * An out-of-scope plot opened on a follow-up still reports what the first
+	 * round found — it passed, and saying so is the whole reason it is listed.
+	 */
+	public function test_a_plot_that_passed_still_reports_its_first_round_result(): void {
+		$plot     = $this->create_plot( 'B32' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'compliant', 'category_1', 0 );
+
+		$prev = $this->previous_finding_for( $followup, $plot );
+
+		$this->assertIsArray( $prev );
+		$this->assertSame( 'compliant', $prev['status'] );
+	}
+
+	/**
+	 * A plot the parent never recorded has nothing to show, and must not invent
+	 * an empty work order.
+	 */
+	public function test_a_plot_the_parent_never_recorded_has_no_previous_finding(): void {
+		$plot     = $this->create_plot( 'B33' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+
+		$this->assertNull( $this->previous_finding_for( $followup, $plot ) );
+	}
+
+	/**
+	 * A voided first-round finding is surfaced as voided rather than presented
+	 * as a live work order — the membership ended, so the work is not owed.
+	 */
+	public function test_a_voided_first_round_finding_is_marked_voided(): void {
+		$plot     = $this->create_plot( 'B34' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1, '2026-07-01 09:00:00' );
+
+		$prev = $this->previous_finding_for( $followup, $plot );
+
+		$this->assertIsArray( $prev );
+		$this->assertTrue( $prev['isVoided'] );
+	}
+
+	public function test_an_unscoped_followup_has_no_previous_finding(): void {
+		$plot     = $this->create_plot( 'B35' );
+		$followup = $this->insert_round( 'followup', null );
+
+		$this->assertNull( $this->previous_finding_for( $followup, $plot ) );
+	}
+
+	/**
+	 * The photographs are the part that actually settles it on site — a
+	 * before-picture to hold the plot against.
+	 */
+	public function test_the_first_rounds_photographs_travel_with_it(): void {
+		global $wpdb;
+		$plot     = $this->create_plot( 'B36' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1 );
+
+		$finding_id = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT id FROM " . self::$tables['findings'] . " WHERE plot_id = %d AND round_id = %d",
+			$plot,
+			$parent
+		) );
+		$wpdb->insert( self::$tables['photos'], array(
+			'finding_id'                 => $finding_id,
+			'google_drive_url'           => 'https://drive.example/full.jpg',
+			'google_drive_thumbnail_url' => 'https://drive.example/thumb.jpg',
+			'photo_caption'              => 'Western beds',
+			'photo_order'                => 0,
+		) );
+
+		$prev = $this->previous_finding_for( $followup, $plot );
+
+		$this->assertCount( 1, $prev['photos'] );
+		$this->assertSame( 'https://drive.example/thumb.jpg', $prev['photos'][0]['thumbnailUrl'] );
+		$this->assertSame( 'Western beds', $prev['photos'][0]['caption'] );
+	}
+
+	/**
+	 * A soft-deleted photo is not shown.
+	 */
+	public function test_a_deleted_photograph_is_not_returned(): void {
+		global $wpdb;
+		$plot     = $this->create_plot( 'B37' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1 );
+
+		$finding_id = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT id FROM " . self::$tables['findings'] . " WHERE plot_id = %d AND round_id = %d",
+			$plot,
+			$parent
+		) );
+		$wpdb->insert( self::$tables['photos'], array(
+			'finding_id'       => $finding_id,
+			'google_drive_url' => 'https://drive.example/gone.jpg',
+			'deleted_at'       => '2026-07-01 09:00:00',
+		) );
+
+		$this->assertSame( array(), $this->previous_finding_for( $followup, $plot )['photos'] );
+	}
+
+	/**
+	 * Every column previous_finding() reads must exist in BOTH environments —
+	 * the real schema and the fixture tables CI builds against a bare
+	 * WordPress. A column present in one and not the other is green here and red
+	 * in CI, which is how this nearly shipped.
+	 */
+	public function test_the_previous_finding_query_leaves_no_db_error(): void {
+		global $wpdb;
+		$plot     = $this->create_plot( 'B38' );
+		$parent   = $this->insert_round( 'primary', null, 100 );
+		$followup = $this->insert_round( 'followup', $parent );
+		$this->create_finding( $parent, $plot, 'non_compliant', 'category_3', 1 );
+
+		$this->previous_finding_for( $followup, $plot );
+
+		$this->assertSame( '', $wpdb->last_error, 'previous_finding hit a DB error: ' . $wpdb->last_error );
 	}
 
 	// ---- plot order (#42) ---------------------------------------------------

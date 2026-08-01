@@ -200,6 +200,17 @@ function buildPopup(plot, round, strings, navigate) {
 		wrap.append(note);
 	}
 
+	// Out of scope on a follow-up: the first round passed this plot, so it is on
+	// the map for orientation only. Say why, and omit the Inspect button — the
+	// server refuses a finding here in any case (#43).
+	if (plot.inScope === false) {
+		const note = document.createElement('div');
+		note.className = 'ami-map-popup__note';
+		note.textContent = 'Passed the first round — not part of this follow-up';
+		wrap.append(note);
+		return wrap;
+	}
+
 	// Vacant plots are shown but not inspectable — no tenant to record against,
 	// so omit the Inspect button (and the status badge, which would be "Not
 	// inspected" and misleading).
@@ -366,6 +377,14 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 			style.dashArray = '4 5';
 			style.opacity = 0.6;
 			style.fillOpacity = corners ? 0.12 : 0.4;
+		}
+		// Out of scope on a follow-up: on the map for orientation only. Fade it
+		// harder than a vacant plot so the handful actually being re-inspected
+		// stand out against a section-wide backdrop (#43).
+		if (plot.inScope === false) {
+			style.dashArray = '2 6';
+			style.opacity = 0.35;
+			style.fillOpacity = corners ? 0.06 : 0.2;
 		}
 		const layer = corners
 			? L.polygon(corners, style).addTo(map)
