@@ -371,6 +371,15 @@ final class Inspect_Ajax {
 			\wp_send_json_error( [ 'message' => \__( 'Round not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
 
+		if ( self::is_unscoped_followup( $round ) ) {
+			\wp_send_json_error(
+				[
+					'message' => \__( 'This follow-up round is not linked to a primary round, so its plot list cannot be worked out. An administrator needs to set the round it follows up on.', 'allotment-manager-inspections' ),
+				],
+				409
+			);
+		}
+
 		$rows = self::fetch_plot_rows( $round );
 
 		$plots = array_map( [ self::class, 'format_plot_row' ], $rows );
@@ -391,6 +400,27 @@ final class Inspect_Ajax {
 				'map'   => [ 'tile' => $tile ],
 			]
 		);
+	}
+
+	/**
+	 * Whether a round claims to be a follow-up but has no scope to resolve.
+	 *
+	 * A follow-up's plot list IS its parent's flagged findings, reached through
+	 * `parent_round_id`. With no parent there is no list to build, and the
+	 * branch in {@see fetch_plot_rows()} falls through to the primary one —
+	 * handing inspectors every plot in the section. That is silent by nature: a
+	 * too-long plot list reads as a busy round, not a misconfigured one, and
+	 * both live 2026 follow-ups were in exactly this state for a full round.
+	 *
+	 * The admin form now requires the parent when creating a follow-up, so this
+	 * only catches rounds predating that (and any future path that forgets).
+	 *
+	 * @since #40
+	 * @param object $round Round row carrying inspection_type + parent_round_id.
+	 * @return bool True when the round cannot be scoped and must be refused.
+	 */
+	private static function is_unscoped_followup( object $round ): bool {
+		return 'followup' === $round->inspection_type && empty( $round->parent_round_id );
 	}
 
 	/**
@@ -418,6 +448,13 @@ final class Inspect_Ajax {
 	 * Voided findings are excluded: a finding is voided when the membership ends
 	 * mid-round, so there is no live non-compliance left to re-inspect and the
 	 * plot must not be dragged into the follow-up on a departed member's record.
+	 *
+	 * A follow-up round with NO `parent_round_id` has no scope to resolve, and
+	 * {@see list_plots()} refuses it rather than reaching this method — until #40
+	 * it fell through to the primary branch and listed the whole section, which is
+	 * how the live 2026 follow-ups came to show every tenant on the site. The
+	 * caller checks it, not this method, so the failure is an explicit error to
+	 * the inspector rather than an empty list they would read as "nothing to do".
 	 *
 	 * @since #39
 	 * @param object $round Round row: id, site_section, inspection_type, parent_round_id.

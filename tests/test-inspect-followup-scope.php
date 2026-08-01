@@ -280,4 +280,40 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 
 		$this->assertSame( array( 'B5', 'B6' ), $this->plot_numbers_for( $this->primary_round( 100 ) ) );
 	}
+
+	// ---- the unscoped-follow-up guard (#40) --------------------------------
+
+	private function is_unscoped( object $round ): bool {
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'is_unscoped_followup' );
+		$m->setAccessible( true );
+		return (bool) $m->invoke( null, $round );
+	}
+
+	/**
+	 * The live failure. A follow-up with no parent has no scope to resolve, and
+	 * the query branch would fall through to "every plot in the section" — which
+	 * is what both 2026 follow-up rounds did for a full round before anyone
+	 * noticed, because a too-long list looks like a busy round.
+	 */
+	public function test_followup_without_a_parent_is_refused(): void {
+		$this->assertTrue( $this->is_unscoped( $this->followup_round( 0 ) ) );
+	}
+
+	public function test_followup_with_a_null_parent_is_refused(): void {
+		$round = $this->followup_round( 0 );
+		$round->parent_round_id = null;
+
+		$this->assertTrue( $this->is_unscoped( $round ) );
+	}
+
+	public function test_properly_scoped_followup_is_allowed(): void {
+		$this->assertFalse( $this->is_unscoped( $this->followup_round( 100 ) ) );
+	}
+
+	/**
+	 * A primary round legitimately has no parent, so the guard must not catch it.
+	 */
+	public function test_primary_round_is_not_treated_as_unscoped(): void {
+		$this->assertFalse( $this->is_unscoped( $this->primary_round( 100 ) ) );
+	}
 }
