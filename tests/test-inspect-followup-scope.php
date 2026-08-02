@@ -76,6 +76,7 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				round_id bigint(20) UNSIGNED NOT NULL,
 				plot_id bigint(20) UNSIGNED NOT NULL,
+				subdivision_identifier varchar(10) NOT NULL DEFAULT '',
 				compliance_status varchar(30) NOT NULL DEFAULT 'compliant',
 				compliance_category varchar(30) DEFAULT NULL,
 				findings_summary text,
