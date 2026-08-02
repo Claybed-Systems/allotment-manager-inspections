@@ -73,6 +73,7 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				round_id bigint(20) UNSIGNED NOT NULL,
 				plot_id bigint(20) UNSIGNED NOT NULL,
 				subdivision_identifier varchar(10) NOT NULL DEFAULT '',
+				visit_sequence tinyint(3) UNSIGNED NOT NULL DEFAULT 1,
 				compliance_status varchar(30) NOT NULL DEFAULT 'compliant',
 				compliance_category varchar(30) DEFAULT NULL,
 				findings_summary text,
@@ -156,6 +157,25 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 			$wpdb->query( "CREATE TABLE {$table} {$columns}" );
 			self::$created[] = $table;
 		}
+
+		// A fixture table left behind by an earlier run is REUSED above, not
+		// recreated, so a column added to the DDL never reaches it and every
+		// query naming that column fails with "Unknown column" — against a table
+		// this suite created itself. Backfill rather than drop: the real schema
+		// may be what was found, and dropping it would take the genuine table.
+		$findings = self::$tables['findings'];
+		$has_visit = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+				$wpdb->dbname,
+				$findings,
+				'visit_sequence'
+			)
+		);
+		if ( ! (int) $has_visit ) {
+			$wpdb->query( "ALTER TABLE {$findings} ADD COLUMN visit_sequence tinyint(3) UNSIGNED NOT NULL DEFAULT 1" );
+		}
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -190,7 +210,7 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		return (int) $wpdb->insert_id;
 	}
 
-	private function create_finding( int $round_id, int $plot_id, string $status, ?string $category, int $requires_followup, ?string $voided_at = null, string $subdivision = '' ): void {
+	private function create_finding( int $round_id, int $plot_id, string $status, ?string $category, int $requires_followup, ?string $voided_at = null, string $subdivision = '', int $visit = 1 ): void {
 		global $wpdb;
 		$wpdb->insert(
 			self::$tables['findings'],
@@ -200,6 +220,7 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				// Part of UNIQUE KEY round_plot on the real table, so a caller
 				// wanting two findings on one plot in one round varies this.
 				'subdivision_identifier' => $subdivision,
+				'visit_sequence'         => $visit,
 				'compliance_status'   => $status,
 				'compliance_category' => $category,
 				// Supplied because the real schema has them NOT NULL; harmless
@@ -249,6 +270,30 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 	/**
 	 * A primary round is unaffected: it lists the whole section, flagged or not.
 	 */
+	/**
+	 * A re-inspection still shows what failed the first time.
+	 *
+	 * The plot list carries `previousCategory` so the inspector can tell which
+	 * plots they are there to re-check. That used to come from the parent round;
+	 * with follow-up rounds gone (#883) it comes from visit 1 of THIS round.
+	 * Without it every plot in the section looks identical and the inspector is
+	 * back to remembering or ringing someone, which is the problem #43 fixed.
+	 */
+	public function test_the_plot_list_carries_the_first_visits_category(): void {
+		$plot = $this->create_plot( 'B9' );
+		$this->create_finding( 100, $plot, 'non_compliant', 'category_3', 1, null, '', 1 );
+
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'fetch_plot_rows' );
+		$m->setAccessible( true );
+		$rows = $m->invoke( null, $this->primary_round( 100 ) );
+
+		$this->assertSame(
+			'category_3',
+			$rows[0]->previous_category,
+			"the first visit's category must reach the plot list"
+		);
+	}
+
 	public function test_primary_round_lists_the_whole_section(): void {
 		$a = $this->create_plot( 'B5' );
 		$this->create_plot( 'B6' );

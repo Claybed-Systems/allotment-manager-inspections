@@ -657,7 +657,7 @@ final class Inspect_Ajax {
 					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
-					NULL AS previous_category,
+					prev.compliance_category AS previous_category,
 					1 AS in_scope
 				FROM {$plots_table} p
 				{$holder_join}
@@ -666,9 +666,17 @@ final class Inspect_Ajax {
 					ON curr.plot_id = p.id
 					AND curr.id = (SELECT MAX(c2.id) FROM {$findings_table} c2
 					                WHERE c2.plot_id = p.id AND c2.round_id = %d)
+				LEFT JOIN {$findings_table} prev
+					ON prev.plot_id = p.id
+					AND prev.id = (SELECT MIN(p2.id) FROM {$findings_table} p2
+					                WHERE p2.plot_id = p.id
+					                  AND p2.round_id = %d
+					                  AND p2.visit_sequence = 1
+					                  AND p2.voided_at IS NULL)
 				WHERE p.section = %s
 				  AND (p.deleted_at IS NULL)
 				ORDER BY " . self::plot_number_order_sql(),
+				$round_id,
 				$round_id,
 				$round->site_section
 			);
