@@ -323,8 +323,6 @@ final class Inspect_Ajax {
 			"SELECT
 				r.id,
 				r.round_number,
-				r.inspection_type,
-				r.parent_round_id,
 				r.site_section,
 				r.status,
 				r.scheduled_start_date,
@@ -343,8 +341,6 @@ final class Inspect_Ajax {
 				return [
 					'id'                  => (int) $row->id,
 					'roundNumber'         => $row->round_number,
-					'inspectionType'      => $row->inspection_type,
-					'parentRoundId'       => $row->parent_round_id ? (int) $row->parent_round_id : null,
 					'siteSection'         => $row->site_section,
 					'status'              => $row->status,
 					'scheduledStartDate'  => $row->scheduled_start_date,
@@ -381,20 +377,12 @@ final class Inspect_Ajax {
 
 		// Load round meta.
 		$round = $wpdb->get_row(
-			$wpdb->prepare( "SELECT id, round_number, site_section, inspection_type, parent_round_id, status FROM {$rounds_table} WHERE id = %d", $round_id )
+			$wpdb->prepare( "SELECT id, round_number, site_section, status FROM {$rounds_table} WHERE id = %d", $round_id )
 		);
 		if ( ! $round ) {
 			\wp_send_json_error( [ 'message' => \__( 'Round not found.', 'allotment-manager-inspections' ) ], 404 );
 		}
 
-		if ( self::is_unscoped_followup( $round ) ) {
-			\wp_send_json_error(
-				[
-					'message' => \__( 'This follow-up round is not linked to a primary round, so its plot list cannot be worked out. An administrator needs to set the round it follows up on.', 'allotment-manager-inspections' ),
-				],
-				409
-			);
-		}
 
 		$rows = self::fetch_plot_rows( $round );
 
@@ -408,8 +396,6 @@ final class Inspect_Ajax {
 					'id'             => (int) $round->id,
 					'roundNumber'    => $round->round_number,
 					'siteSection'    => $round->site_section,
-					'inspectionType' => $round->inspection_type,
-					'parentRoundId'  => $round->parent_round_id ? (int) $round->parent_round_id : null,
 					'status'         => $round->status,
 				],
 				'plots' => $plots,
@@ -454,27 +440,6 @@ final class Inspect_Ajax {
 			. "CAST(IF({$column} LIKE '%.%', SUBSTRING_INDEX({$column}, '.', -1), '0') AS UNSIGNED) ASC";
 	}
 
-	/**
-	 * A round's type + parent, or null when it cannot be read.
-	 *
-	 * Shared by the save-scope guard and the previous-finding lookup so the two
-	 * always agree on what "the parent round" means for a given round.
-	 *
-	 * @since #43
-	 * @param int $round_id Round id.
-	 * @return object|null Row with inspection_type and parent_round_id.
-	 */
-	private static function round_scope( int $round_id ): ?object {
-		global $wpdb;
-
-		$rounds_table = $wpdb->prefix . 'am_inspection_rounds';
-
-		$row = $wpdb->get_row(
-			$wpdb->prepare( "SELECT inspection_type, parent_round_id FROM {$rounds_table} WHERE id = %d", $round_id )
-		);
-
-		return $row ?: null;
-	}
 
 	/**
 	 * The FIRST round's finding for this plot, with its photographs.
@@ -501,11 +466,9 @@ final class Inspect_Ajax {
 	private static function previous_finding( int $round_id, int $plot_id ): ?array {
 		global $wpdb;
 
-		$round = self::round_scope( $round_id );
-		if ( ! $round || 'followup' !== $round->inspection_type || empty( $round->parent_round_id ) ) {
-			return null;
-		}
-
+		// The work order is now visit 1 of THIS round, not a finding in a
+		// separate parent round (#883). Returns null when the plot has no first
+		// visit yet, which is the ordinary case for an initial inspection.
 		$findings_table = $wpdb->prefix . 'am_inspection_findings';
 
 		$prev = $wpdb->get_row(
@@ -515,10 +478,11 @@ final class Inspect_Ajax {
 					has_derelict_structures, has_tenancy_breach, tenancy_breach_description,
 					cultivation_percentage, inspection_date, inspector_names, voided_at
 				FROM {$findings_table}
-				WHERE plot_id = %d AND round_id = %d
+				WHERE plot_id = %d AND round_id = %d AND visit_sequence = 1
+				ORDER BY id ASC
 				LIMIT 1",
 				$plot_id,
-				(int) $round->parent_round_id
+				$round_id
 			)
 		);
 
@@ -613,54 +577,14 @@ final class Inspect_Ajax {
 	 * @return bool True when a finding may be recorded.
 	 */
 	private static function plot_is_in_scope( int $round_id, int $plot_id ): bool {
-		global $wpdb;
+		// A round is one per (year, site) and covers its whole section, so every
+		// plot in it is in scope. The follow-up round that scoped a flagged
+		// subset is gone (#883): a re-inspection is visit 2 within this round.
+		unset( $round_id, $plot_id );
 
-		$round = self::round_scope( $round_id );
-
-		if ( ! $round || 'followup' !== $round->inspection_type ) {
-			return true;
-		}
-
-		// An unscoped follow-up has no in-scope plots at all; list_plots() already
-		// refuses to serve one (#42), so nothing can legitimately be recorded.
-		if ( empty( $round->parent_round_id ) ) {
-			return false;
-		}
-
-		$findings_table = $wpdb->prefix . 'am_inspection_findings';
-
-		return (bool) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT 1 FROM {$findings_table}
-				WHERE round_id = %d AND plot_id = %d
-				  AND requires_followup = 1 AND voided_at IS NULL
-				LIMIT 1",
-				(int) $round->parent_round_id,
-				$plot_id
-			)
-		);
+		return true;
 	}
 
-	/**
-	 * Whether a round claims to be a follow-up but has no scope to resolve.
-	 *
-	 * A follow-up's plot list IS its parent's flagged findings, reached through
-	 * `parent_round_id`. With no parent there is no list to build, and the
-	 * branch in {@see fetch_plot_rows()} falls through to the primary one —
-	 * handing inspectors every plot in the section. That is silent by nature: a
-	 * too-long plot list reads as a busy round, not a misconfigured one, and
-	 * both live 2026 follow-ups were in exactly this state for a full round.
-	 *
-	 * The admin form now requires the parent when creating a follow-up, so this
-	 * only catches rounds predating that (and any future path that forgets).
-	 *
-	 * @since #40
-	 * @param object $round Round row carrying inspection_type + parent_round_id.
-	 * @return bool True when the round cannot be scoped and must be refused.
-	 */
-	private static function is_unscoped_followup( object $round ): bool {
-		return 'followup' === $round->inspection_type && empty( $round->parent_round_id );
-	}
 
 	/**
 	 * The plots in scope for a round.
@@ -688,7 +612,7 @@ final class Inspect_Ajax {
 	 * mid-round, so there is no live non-compliance left to re-inspect and the
 	 * plot must not be dragged into the follow-up on a departed member's record.
 	 *
-	 * A follow-up round with NO `parent_round_id` has no scope to resolve, and
+	 * A round covers its whole section (#883).
 	 * {@see list_plots()} refuses it rather than reaching this method — until #40
 	 * it fell through to the primary branch and listed the whole section, which is
 	 * how the live 2026 follow-ups came to show every tenant on the site. The
@@ -699,7 +623,7 @@ final class Inspect_Ajax {
 	 * `LENGTH(plot_number), plot_number`. See that method for why.
 	 *
 	 * @since #39
-	 * @param object $round Round row: id, site_section, inspection_type, parent_round_id.
+	 * @param object $round Round row: id, site_section.
 	 * @return array<int,object> Plot rows for format_plot_row().
 	 */
 	private static function fetch_plot_rows( object $round ): array {
@@ -716,42 +640,6 @@ final class Inspect_Ajax {
 
 		$round_id = (int) $round->id;
 
-		if ( 'followup' === $round->inspection_type && $round->parent_round_id ) {
-			// The whole section, with `in_scope` marking the plots the parent
-			// flagged. A follow-up still only RE-INSPECTS the flagged plots — the
-			// rest ride along faded and non-inspectable purely so the inspector can
-			// place themselves while walking (#43). Getting from V3 to V47 past
-			// forty plots that are not on the list is the problem this solves.
-			//
-			// So this is a LEFT JOIN to `prev`, not the INNER JOIN it replaced, and
-			// scope moves from the WHERE clause into the `in_scope` column. Every
-			// consumer of scope must now read that column: the plot list fades the
-			// row, the map dashes it, save_finding() refuses it, and the progress
-			// count ignores it. A follow-up's denominator is still the flagged
-			// count, NOT the section (#850, #860) — that is the whole reason the
-			// flag travels per-row instead of the query simply widening.
-			//
-			// `OR prev.id IS NOT NULL` keeps a flagged plot in its own follow-up
-			// even if its section no longer matches the round's. Section equality
-			// is enforced when a round is created (#866), so this only catches
-			// legacy or hand-edited data — but silently dropping a plot from its
-			// own follow-up is the exact bug #40 was about, and it must not come
-			// back through a side door.
-			//
-			// Both finding joins resolve to ONE row via `id = (SELECT MAX(id)
-			// ...)` rather than joining on (plot_id, round_id) directly. Those
-			// joins are one-to-many the moment a plot can hold more than one
-			// finding in a round, which the plot-centric redesign allows — and a
-			// one-to-many LEFT JOIN here does not fetch extra columns, it
-			// duplicates the PLOT ROW. The inspector would see the same plot
-			// listed twice, which is an invitation to record it twice.
-			//
-			// Shipped while `UNIQUE KEY round_plot` still guarantees one finding
-			// per plot per round, so today MAX(id) can only ever select the one
-			// row the old join matched and this is a deliberate no-op. That is
-			// what makes it verifiable against live data before the constraint
-			// is relaxed: the plot list must stay exactly as long as the
-			// section's plot count.
 			$sql = $wpdb->prepare(
 				"SELECT
 					p.id,
@@ -770,7 +658,7 @@ final class Inspect_Ajax {
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					prev.compliance_category AS previous_category,
-					(prev.id IS NOT NULL) AS in_scope
+					1 AS in_scope
 				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
@@ -780,53 +668,18 @@ final class Inspect_Ajax {
 					                WHERE c2.plot_id = p.id AND c2.round_id = %d)
 				LEFT JOIN {$findings_table} prev
 					ON prev.plot_id = p.id
-					AND prev.id = (SELECT MAX(p2.id) FROM {$findings_table} p2
+					AND prev.id = (SELECT MIN(p2.id) FROM {$findings_table} p2
 					                WHERE p2.plot_id = p.id
 					                  AND p2.round_id = %d
-					                  AND p2.requires_followup = 1
+					                  AND p2.visit_sequence = 1
 					                  AND p2.voided_at IS NULL)
-				WHERE (p.section = %s OR prev.id IS NOT NULL)
-				  AND (p.deleted_at IS NULL)
-				ORDER BY " . self::plot_number_order_sql(),
-				$round_id,
-				(int) $round->parent_round_id,
-				$round->site_section
-			);
-		} else {
-			$sql = $wpdb->prepare(
-				"SELECT
-					p.id,
-					p.plot_number,
-					p.section,
-					COALESCE(asg.member_id, p.current_member_id) AS effective_member_id,
-					asg.start_date AS assignment_start_date,
-					m.user_id AS holder_user_id,
-					m.first_name,
-					m.last_name,
-					mo.latitude,
-					mo.longitude,
-					mo.width,
-					mo.height,
-					mo.rotation_angle,
-					curr.id AS current_finding_id,
-					curr.compliance_category AS current_category,
-					NULL AS previous_category,
-					1 AS in_scope
-				FROM {$plots_table} p
-				{$holder_join}
-				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
-				LEFT JOIN {$findings_table} curr
-					ON curr.plot_id = p.id
-					AND curr.id = (SELECT MAX(c2.id) FROM {$findings_table} c2
-					                WHERE c2.plot_id = p.id AND c2.round_id = %d)
 				WHERE p.section = %s
 				  AND (p.deleted_at IS NULL)
 				ORDER BY " . self::plot_number_order_sql(),
 				$round_id,
+				$round_id,
 				$round->site_section
 			);
-		}
-
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results( $sql );
 		// phpcs:enable
