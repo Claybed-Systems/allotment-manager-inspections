@@ -737,6 +737,21 @@ final class Inspect_Ajax {
 			// legacy or hand-edited data — but silently dropping a plot from its
 			// own follow-up is the exact bug #40 was about, and it must not come
 			// back through a side door.
+			//
+			// Both finding joins resolve to ONE row via `id = (SELECT MAX(id)
+			// ...)` rather than joining on (plot_id, round_id) directly. Those
+			// joins are one-to-many the moment a plot can hold more than one
+			// finding in a round, which the plot-centric redesign allows — and a
+			// one-to-many LEFT JOIN here does not fetch extra columns, it
+			// duplicates the PLOT ROW. The inspector would see the same plot
+			// listed twice, which is an invitation to record it twice.
+			//
+			// Shipped while `UNIQUE KEY round_plot` still guarantees one finding
+			// per plot per round, so today MAX(id) can only ever select the one
+			// row the old join matched and this is a deliberate no-op. That is
+			// what makes it verifiable against live data before the constraint
+			// is relaxed: the plot list must stay exactly as long as the
+			// section's plot count.
 			$sql = $wpdb->prepare(
 				"SELECT
 					p.id,
@@ -759,12 +774,17 @@ final class Inspect_Ajax {
 				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
-				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
+				LEFT JOIN {$findings_table} curr
+					ON curr.plot_id = p.id
+					AND curr.id = (SELECT MAX(c2.id) FROM {$findings_table} c2
+					                WHERE c2.plot_id = p.id AND c2.round_id = %d)
 				LEFT JOIN {$findings_table} prev
 					ON prev.plot_id = p.id
-					AND prev.round_id = %d
-					AND prev.requires_followup = 1
-					AND prev.voided_at IS NULL
+					AND prev.id = (SELECT MAX(p2.id) FROM {$findings_table} p2
+					                WHERE p2.plot_id = p.id
+					                  AND p2.round_id = %d
+					                  AND p2.requires_followup = 1
+					                  AND p2.voided_at IS NULL)
 				WHERE (p.section = %s OR prev.id IS NOT NULL)
 				  AND (p.deleted_at IS NULL)
 				ORDER BY " . self::plot_number_order_sql(),
@@ -795,7 +815,10 @@ final class Inspect_Ajax {
 				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
-				LEFT JOIN {$findings_table} curr ON curr.plot_id = p.id AND curr.round_id = %d
+				LEFT JOIN {$findings_table} curr
+					ON curr.plot_id = p.id
+					AND curr.id = (SELECT MAX(c2.id) FROM {$findings_table} c2
+					                WHERE c2.plot_id = p.id AND c2.round_id = %d)
 				WHERE p.section = %s
 				  AND (p.deleted_at IS NULL)
 				ORDER BY " . self::plot_number_order_sql(),

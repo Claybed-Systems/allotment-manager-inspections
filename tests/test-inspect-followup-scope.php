@@ -193,13 +193,16 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		return (int) $wpdb->insert_id;
 	}
 
-	private function create_finding( int $round_id, int $plot_id, string $status, ?string $category, int $requires_followup, ?string $voided_at = null ): void {
+	private function create_finding( int $round_id, int $plot_id, string $status, ?string $category, int $requires_followup, ?string $voided_at = null, string $subdivision = '' ): void {
 		global $wpdb;
 		$wpdb->insert(
 			self::$tables['findings'],
 			array(
 				'round_id'            => $round_id,
 				'plot_id'             => $plot_id,
+				// Part of UNIQUE KEY round_plot on the real table, so a caller
+				// wanting two findings on one plot in one round varies this.
+				'subdivision_identifier' => $subdivision,
 				'compliance_status'   => $status,
 				'compliance_category' => $category,
 				// Supplied because the real schema has them NOT NULL; harmless
@@ -336,6 +339,72 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		$this->create_finding( 100, $a, 'non_compliant', 'category_3', 1 );
 
 		$this->assertSame( array( 'B5', 'B6' ), $this->plot_numbers_for( $this->primary_round( 100 ) ) );
+	}
+
+	/**
+	 * A plot holding more than one finding in a round is still ONE row.
+	 *
+	 * The finding joins in fetch_plot_rows() used to match on (plot_id,
+	 * round_id), which is one-to-many as soon as a plot can be inspected twice
+	 * in a round — and a one-to-many LEFT JOIN here does not add columns, it
+	 * duplicates the PLOT. The inspector would open the round and see the same
+	 * plot listed twice, which is an invitation to record it twice.
+	 *
+	 * The plot-centric redesign makes a second finding per plot the normal case
+	 * (the re-inspection), so both joins now resolve to the latest finding via
+	 * `id = (SELECT MAX(id) ...)`. `current_finding_id` must be that latest one,
+	 * because the app uses it to decide whether to open a new record or edit the
+	 * existing one.
+	 *
+	 * This is reachable TODAY, ahead of the schema change: UNIQUE KEY round_plot
+	 * is (round_id, plot_id, subdivision_identifier), so a subdivided plot may
+	 * already hold one finding per subdivision in a single round. The duplicate
+	 * plot row is therefore a live defect for subdivided plots, not only a
+	 * future risk — which is also why the fixture varies the subdivision rather
+	 * than trying to insert a straight duplicate the constraint would reject.
+	 */
+	public function test_a_plot_with_two_findings_in_a_round_is_listed_once(): void {
+		global $wpdb;
+
+		$plot = $this->create_plot( 'B7' );
+		$this->create_finding( 100, $plot, 'non_compliant', 'category_3', 1, null, '' );
+		$this->create_finding( 100, $plot, 'compliant', 'category_1', 0, null, 'a' );
+
+		$this->assertSame(
+			2,
+			(int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM ' . self::$tables['findings'] . ' WHERE round_id = %d AND plot_id = %d',
+					100,
+					$plot
+				)
+			),
+			'Both findings must exist, or this test proves nothing'
+		);
+
+		$this->assertSame(
+			array( 'B7' ),
+			$this->plot_numbers_for( $this->primary_round( 100 ) ),
+			'A plot with two findings in one round must appear once in the plot list'
+		);
+
+		$latest = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT MAX(id) FROM ' . self::$tables['findings'] . ' WHERE round_id = %d AND plot_id = %d',
+				100,
+				$plot
+			)
+		);
+
+		$m = new ReflectionMethod( Inspect_Ajax::class, 'fetch_plot_rows' );
+		$m->setAccessible( true );
+		$rows = $m->invoke( null, $this->primary_round( 100 ) );
+
+		$this->assertSame(
+			$latest,
+			(int) $rows[0]->current_finding_id,
+			'The row must carry the LATEST finding, so the app edits the re-inspection not the original'
+		);
 	}
 
 	// ---- the whole section, with scope flagged (#43) ------------------------
