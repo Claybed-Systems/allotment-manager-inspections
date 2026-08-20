@@ -16,36 +16,45 @@
  * the user toggles back to the List.
  */
 
-import { badgeMeta } from '../components/badge.js';
+import { badgeMeta, statusBucket } from '../components/badge.js';
 
-// Plot styling per verdict. Hexes mirror the .ami-badge rules in inspect.css so
-// the map and the list agree at a glance — including `review`, which shares the
-// amber of Cat 2 there and so shares it here; the popup's badge names it.
+// Plot styling per COMPLIANCE STATUS — keyed on statusBucket(), the same axis
+// the filter chips use, so filtering to "Non-compliant" turns the map into
+// exactly the red plots and nothing has to be reconciled by eye.
+//
+// Status, not category. Colouring by `compliance_category` drew a Category 1
+// plot failed for rubbish as a green "pass" while its own popup said
+// Non-compliant — the two axes are independent (see components/badge.js).
+//
+// One red covers non-compliance rather than Cat 2 amber / Cat 3 terracotta.
+// At a glance across a section the question is "who do I need to see?", which
+// is one question with one answer; severity is a second question, and the
+// popup badge and the list still answer it with the Cat 2 / Cat 3 label.
+//
+// Light fills over satellite imagery, with a darker stroke to hold the edge:
+// `fillColor` is what reads at a glance, `color` is what keeps the plot's
+// footprint legible against the photograph under it.
 const MARKER_STYLE = {
-	category_1: { color: '#2d6e3a', fillColor: '#6aa56f' }, // Pass — green
-	category_2: { color: '#8a5d1d', fillColor: '#e8a64e' }, // Cat 2 — amber
-	category_3: { color: '#7a3320', fillColor: '#c86f4a' }, // Cat 3 — terracotta
-	exempt:     { color: '#8c8f94', fillColor: '#c9ccd0' }, // Exempt — slate
-	newtenant:  { color: '#1f5d8a', fillColor: '#79a9cd' }, // New tenant — blue
-	review:     { color: '#8a5d1d', fillColor: '#e8a64e' }, // Under review — amber
-	none:       { color: '#777777', fillColor: '#bdbdbd' }, // Not inspected — grey
+	compliant:       { color: '#2d6e3a', fillColor: '#8fce95' }, // Passed — light green
+	non_compliant:   { color: '#b03a2e', fillColor: '#f2a09a' }, // Non-compliant — light red
+	exempt:          { color: '#1f5d8a', fillColor: '#9ec9e8' }, // Exempt — light blue
+	// A new tenant inside the 1 March grace period IS an exemption: the server
+	// records the finding auto-exempt and issues no notice. Same state to the
+	// inspector walking the site, so the same colour.
+	new_tenant:      { color: '#1f5d8a', fillColor: '#9ec9e8' }, // Also exempt — light blue
+	// Not a verdict yet — the committee is still deciding. Amber reads as
+	// "pending" against the settled three, and matches its badge.
+	internal_review: { color: '#8a5d1d', fillColor: '#e8a64e' }, // Under review — amber
+	none:            { color: '#777777', fillColor: '#bdbdbd' }, // Not inspected — grey
 };
 
-// Fallback for an unrecognised key.
-MARKER_STYLE._none = MARKER_STYLE.none;
+// Fallback for an unrecognised bucket.
+const MARKER_STYLE_FALLBACK = MARKER_STYLE.none;
 
-/**
- * The MARKER_STYLE key for a plot, on the same status-first axis as the badge.
- *
- * Colouring by `compliance_category` alone drew a Category 1 plot failed for
- * rubbish as a green "pass" while its own popup badge said Non-compliant — the
- * two axes are independent, see components/badge.js. Derived from badgeMeta()'s
- * CSS class so there is one decision, not two that can drift.
- */
-function styleKeyFor(plot, strings) {
-	const cls = badgeMeta(plot.currentCategory, strings, plot.currentStatus)[0];
-	return cls.replace('ami-badge--', '');
-}
+// Legend order: the settled verdicts first, then the unsettled, then the
+// not-yet-done. Only the buckets actually on the map are drawn — see
+// buildLegend().
+const LEGEND_ORDER = ['compliant', 'non_compliant', 'exempt', 'new_tenant', 'internal_review', 'none'];
 
 // Loaded once per page; reused across List/Map toggles.
 let leafletPromise = null;
@@ -100,7 +109,7 @@ function ensureLeaflet() {
 }
 
 function styleFor(styleKey) {
-	const base = MARKER_STYLE[styleKey] || MARKER_STYLE._none;
+	const base = MARKER_STYLE[styleKey] || MARKER_STYLE_FALLBACK;
 	return {
 		color: base.color,
 		fillColor: base.fillColor,
@@ -113,7 +122,7 @@ function styleFor(styleKey) {
 // Polygon styling for a plot footprint — same palette as the markers, but a
 // translucent fill so the satellite imagery shows through.
 function polyStyleFor(styleKey) {
-	const base = MARKER_STYLE[styleKey] || MARKER_STYLE._none;
+	const base = MARKER_STYLE[styleKey] || MARKER_STYLE_FALLBACK;
 	return { color: base.color, weight: 2, fillColor: base.fillColor, fillOpacity: 0.45 };
 }
 
@@ -249,16 +258,32 @@ function buildPopup(plot, round, strings, navigate) {
 
 /**
  * Legend row mapping each colour to its meaning.
+ *
+ * Only the buckets actually on the map are listed. There are six possible
+ * colours and a typical round shows three; a legend naming colours that are
+ * not on screen makes the reader hunt for plots that do not exist, and on a
+ * phone it costs a line of map to do it.
+ *
+ * @param {Object} strings Localised labels.
+ * @param {Object[]} plots The plots being drawn (already filtered).
  */
-function buildLegend(strings) {
+function buildLegend(strings, plots) {
 	const legend = document.createElement('div');
 	legend.className = 'ami-map-legend';
-	const items = [
-		['none', strings.notInspected],
-		['category_1', strings.cat1],
-		['category_2', strings.cat2],
-		['category_3', strings.cat3],
-	];
+
+	const present = new Set((plots || []).map(statusBucket));
+	const labels = {
+		compliant:       strings.cat1,
+		non_compliant:   strings.statusNonCompliant,
+		exempt:          strings.statusExempt,
+		new_tenant:      strings.statusNewTenant,
+		internal_review: strings.statusUnderReview,
+		none:            strings.notInspected,
+	};
+	const items = LEGEND_ORDER
+		.filter((key) => present.has(key) && MARKER_STYLE[key])
+		.map((key) => [key, labels[key]]);
+
 	for (const [key, label] of items) {
 		const item = document.createElement('span');
 		item.className = 'ami-map-legend__item';
@@ -359,7 +384,7 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 	const mapEl = document.createElement('div');
 	mapEl.className = 'ami-map';
 	container.appendChild(mapEl);
-	container.appendChild(buildLegend(s));
+	container.appendChild(buildLegend(s, placed));
 
 	const t = tile || {};
 	map = L.map(mapEl, { scrollWheelZoom: false });
@@ -381,7 +406,7 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		// Draw the plot's real footprint (a rotated rectangle that scales with
 		// the map) when we have its dimensions; fall back to a dot otherwise.
 		const corners = rectCorners(plot);
-		const styleKey = styleKeyFor(plot, s);
+		const styleKey = statusBucket(plot);
 		const style = corners ? polyStyleFor(styleKey) : styleFor(styleKey);
 		// Vacant plots are shown but not inspectable — render them faded + dashed
 		// so they read as "known empty", not "occupied, awaiting inspection".
