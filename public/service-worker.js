@@ -67,7 +67,12 @@
 // gone: ams#883 made a round one per (year, site), list_rounds stopped
 // returning inspectionType, and the label had been defaulting to a distinction
 // that no longer exists. The faded out-of-scope rendering went with it.
-const VERSION = 'v31';
+// 'v32' the map AND the badges are coloured by compliance status, not
+// cultivation category: light green passed, light red non-compliant, light
+// blue exempt. Same axis the filter chips use, so filtering to Non-compliant
+// leaves exactly the red plots on screen, and a plot's polygon and its badge
+// can no longer disagree. The legend lists only the colours actually present.
+const VERSION = 'v32';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

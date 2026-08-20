@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.6.1
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,12 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.7.0 =
+* The map now colours plots by their compliance status: light green passed, light red non-compliant, light blue exempt (including a new tenant inside the grace period, which the system exempts automatically). Under review stays amber, not yet inspected stays grey.
+* Previously the map coloured by cultivation category, so a well-kept plot failed for rubbish or a derelict shed drew green while its own popup said Non-compliant. Cat 2 and Cat 3 are one red on the map now — at a glance the question is who you need to see; the popup and the list still tell you how bad it was.
+* The badges on the plot list and in the map popups now use those same three colours, so a plot's colour on the map and its badge always agree. A Cat 2 and a Cat 3 both read red and still say "Cat 2" or "Cat 3" — the colour tells you who needs seeing, the label tells you how bad it was.
+* The map key lists only the colours actually on screen, instead of naming states no plot in the round is in.
 
 = 1.6.1 =
 * Round cards and the round header no longer carry a "First round" tag. A round covers a whole section for a season now, so there is no first-versus-follow-up distinction left for it to draw — it had been showing "First round" on every round regardless.
