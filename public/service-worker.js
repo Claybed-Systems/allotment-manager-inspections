@@ -58,7 +58,12 @@
 // the first round faded and not inspectable — walking from V3 to V47 past forty
 // plots that were not on the list made the round hard to navigate. Progress
 // still counts only the plots being re-inspected.
-const VERSION = 'v29';
+// 'v30' the plot list and map can be filtered by the round's verdicts — the
+// same buckets the committee's own round screen filters by, so "show me the
+// non-compliant plots" answers the same on a phone in the field as it does at
+// the desk. The list also reads compliance_status now, so an exempt or
+// under-review plot no longer renders as "Not inspected".
+const VERSION = 'v30';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

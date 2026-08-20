@@ -99,6 +99,16 @@ final class Plugin {
 				'cat1'          => \__( 'Pass', 'allotment-manager-inspections' ),
 				'cat2'          => \__( 'Cat 2', 'allotment-manager-inspections' ),
 				'cat3'          => \__( 'Cat 3', 'allotment-manager-inspections' ),
+				// Verdict labels for a finding with no cultivation category — the
+				// axis the committee's own round screen badges and filters by.
+				// Wording matches that screen so the two read the same.
+				'statusNonCompliant' => \__( 'Non-compliant', 'allotment-manager-inspections' ),
+				'statusExempt'       => \__( 'Exempt', 'allotment-manager-inspections' ),
+				'statusNewTenant'    => \__( 'New tenant', 'allotment-manager-inspections' ),
+				'statusUnderReview'  => \__( 'Under review', 'allotment-manager-inspections' ),
+				// Plot-list filter.
+				'filterAll'     => \__( 'All', 'allotment-manager-inspections' ),
+				'filterEmpty'   => \__( 'No plots match that filter.', 'allotment-manager-inspections' ),
 				'list'          => \__( 'List', 'allotment-manager-inspections' ),
 				'map'           => \__( 'Map', 'allotment-manager-inspections' ),
 				'notes'         => \__( 'Notes (shown to the member)', 'allotment-manager-inspections' ),

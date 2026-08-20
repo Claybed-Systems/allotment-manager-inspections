@@ -292,6 +292,66 @@ body {
 	background: #fadcd0;
 	color: #7a3320;
 }
+/* Verdicts that carry no cultivation category. Deliberately quieter than the
+   graded three: they report a committee decision, not a walk-round result. */
+.ami-badge--exempt {
+	background: var(--ami-muted);
+	color: var(--ami-fg-soft);
+}
+.ami-badge--newtenant {
+	background: #e8f1fa;
+	color: #1f5d8a;
+}
+.ami-badge--review {
+	background: #fff1d6;
+	color: #8a5d1d;
+}
+
+/* ===== Plot-list filter ===== */
+/* A single scrollable row of chips: on a phone the six buckets do not fit
+   across, and wrapping them pushes the list itself below the fold. */
+.ami-filter {
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+	margin-bottom: 12px;
+	padding-bottom: 4px;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+}
+.ami-filter::-webkit-scrollbar {
+	display: none;
+}
+
+.ami-filter__chip {
+	flex: 0 0 auto;
+	/* 40px keeps the tap target usable with gloves on, which is the whole
+	   point of the field app. */
+	min-height: 40px;
+	padding: 8px 14px;
+	border: 1px solid var(--ami-border);
+	border-radius: 999px;
+	background: var(--ami-card);
+	color: var(--ami-fg-soft);
+	font-size: 13px;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+/* Ticked. Inverted rather than merely tinted, so the state survives being read
+   in direct sunlight on a phone at minimum brightness. */
+.ami-filter__chip--on {
+	background: var(--ami-fg);
+	border-color: var(--ami-fg);
+	color: var(--ami-card);
+}
+/* The one bucket that is a work queue rather than a category gets its own
+   colour when ticked — it is the reason the filter exists. */
+.ami-filter__chip--non-compliant.ami-filter__chip--on {
+	background: #7a3320;
+	border-color: #7a3320;
+}
 
 /* ===== Tabs (list/map toggle) ===== */
 .ami-tabs {

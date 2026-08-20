@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.3.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,12 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.6.0 =
+* Filter a round's plot list. A row of chips above the list — Non-compliant, Pass, Exempt, New tenant, Under review, Not inspected — narrows both the List and the Map to the plots you want; tap more than one to combine them, or "All" to clear. Your choice is remembered per round, so recording a finding and coming back keeps the filter you were working to. The buckets are the ones the committee's round screen on the website uses, so both read the same.
+* A plot the committee exempted or put under review no longer shows as "Not inspected" — it now carries its own badge, on the list and on the map.
+* Fix: a plot failed for rubbish, a derelict shed or a tenancy breach while still being well cultivated is Category 1 AND non-compliant. The list badged it "Pass" and the map drew it green. It now reads Non-compliant on both.
+* Fix: the version shown in the app header (and on the Sync queue screen) had been stuck at 1.4.4 since 5 July, on every release since. It is the number you check to tell whether a phone has picked up an update, so it was answering the one question it exists to answer with July's answer. It now matches the version actually shipped, and the test suite fails if the two ever drift again.
 
 = 1.3.0 =
 * New tenants now show by name even when the plot's tenancy record hasn't been re-synced (the app resolves the current holder from the active assignment), and are flagged "New — exempt": you can still record what you see, but the system saves it exempt and sends no notice (they're inside the 1 March grace period).

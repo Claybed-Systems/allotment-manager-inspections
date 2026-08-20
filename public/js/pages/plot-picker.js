@@ -12,7 +12,7 @@
 
 import * as api from '../services/api.js';
 import { renderHeader } from '../components/header.js';
-import { badgeMeta } from '../components/badge.js';
+import { badgeMeta, statusBucket } from '../components/badge.js';
 
 const s = window.amiData.strings;
 
@@ -23,6 +23,25 @@ const s = window.amiData.strings;
 // centre+zoom (plot-map.js `savedView`); this restores the tab. Module-scoped
 // so it survives the SPA re-render.
 const lastView = {}; // roundId -> 'list' | 'map'
+
+// The buckets a plot can fall into, in the order the website's round screen
+// lists them, so an inspector reading both screens reads the same vocabulary.
+// `none` is not a compliance_status — it is the plots with no finding in this
+// round, which on a half-walked round is most of them.
+const STATUS_FILTERS = [
+	'non_compliant',
+	'compliant',
+	'exempt',
+	'new_tenant',
+	'internal_review',
+	'none',
+];
+
+// Remember the ticked filter per round, for the same reason lastView exists:
+// returning from a finding re-renders this picker, and an inspector working
+// the non-compliant plots should not have to re-tick after every save.
+// Module-scoped so it survives the SPA re-render. roundId -> Set<string>.
+const lastFilter = {};
 
 export async function render({ roundId }, { mount, navigate }) {
 	mount.innerHTML = '';
@@ -85,6 +104,77 @@ export async function render({ roundId }, { mount, navigate }) {
 	`;
 	main.appendChild(tabs);
 
+	// ---- Filter -------------------------------------------------------------
+	// The ticked buckets. Nothing ticked means no filter — every plot shows —
+	// so an inspector who has never touched the chips sees the round exactly as
+	// they always did.
+	const selected = new Set(lastFilter[round.id] || []);
+
+	const counts = {};
+	for (const key of STATUS_FILTERS) counts[key] = 0;
+	for (const p of plots) {
+		const bucket = statusBucket(p);
+		if (bucket in counts) counts[bucket]++;
+	}
+
+	const filterBar = document.createElement('div');
+	filterBar.className = 'ami-filter';
+	main.appendChild(filterBar);
+
+	function visiblePlots() {
+		if (!selected.size) return plots;
+		return plots.filter((p) => selected.has(statusBucket(p)));
+	}
+
+	function renderFilterBar() {
+		filterBar.innerHTML = '';
+
+		const all = document.createElement('button');
+		all.type = 'button';
+		all.className = 'ami-filter__chip' + (selected.size ? '' : ' ami-filter__chip--on');
+		all.dataset.filter = '';
+		all.textContent = `${s.filterAll} (${plots.length})`;
+		filterBar.appendChild(all);
+
+		for (const key of STATUS_FILTERS) {
+			// A bucket nothing falls into is left out rather than shown as a dead
+			// "(0)" chip: on a phone the row is already scrolled, and an empty
+			// bucket is one more thing between the inspector and the one they want.
+			// It cannot hide a ticked chip — ticking requires a non-zero count, and
+			// a bucket that empties while the screen is open would need a save,
+			// which re-renders the picker from a fresh payload anyway.
+			if (!counts[key]) continue;
+			const chip = document.createElement('button');
+			chip.type = 'button';
+			chip.className = 'ami-filter__chip ami-filter__chip--' + key.replace(/_/g, '-')
+				+ (selected.has(key) ? ' ami-filter__chip--on' : '');
+			chip.dataset.filter = key;
+			chip.setAttribute('aria-pressed', selected.has(key) ? 'true' : 'false');
+			chip.textContent = `${filterLabel(key)} (${counts[key]})`;
+			filterBar.appendChild(chip);
+		}
+	}
+
+	filterBar.addEventListener('click', (e) => {
+		const chip = e.target.closest('.ami-filter__chip');
+		if (!chip) return;
+		const key = chip.dataset.filter;
+		if (!key) {
+			selected.clear();
+		} else if (selected.has(key)) {
+			selected.delete(key);
+		} else {
+			selected.add(key);
+		}
+		lastFilter[round.id] = [...selected];
+		renderFilterBar();
+		// Re-render whichever view is showing, so List and Map never disagree
+		// about which plots the inspector asked to see.
+		(currentView === 'map' ? renderMap : renderList)();
+	});
+
+	renderFilterBar();
+
 	const viewport = document.createElement('div');
 	main.appendChild(viewport);
 
@@ -93,6 +183,9 @@ export async function render({ roundId }, { mount, navigate }) {
 	// so a slow Leaflet load can't clobber the List after the user toggles.
 	let mapHandle = null;
 	let mapToken = 0;
+	// Which view is showing. The filter re-renders it in place, so it needs to
+	// know which one without asking the DOM.
+	let currentView = initialView;
 	function teardownMap() {
 		if (mapHandle) {
 			mapHandle.destroy();
@@ -109,6 +202,12 @@ export async function render({ roundId }, { mount, navigate }) {
 			return;
 		}
 
+		const shown = visiblePlots();
+		if (!shown.length) {
+			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(s.filterEmpty)}</div>`;
+			return;
+		}
+
 		// On a follow-up, say up front how many of the listed plots actually need
 		// re-inspecting — the list is now mostly context, so the count is not
 		// something the inspector can read off its length any more.
@@ -121,7 +220,7 @@ export async function render({ roundId }, { mount, navigate }) {
 			viewport.appendChild(note);
 		}
 
-		for (const p of plots) {
+		for (const p of shown) {
 			const isVacant = !!p.isVacant;
 			// Out of scope: on a follow-up round, a plot the first round passed. It
 			// is listed so the inspector can place themselves while walking, but it
@@ -148,7 +247,7 @@ export async function render({ roundId }, { mount, navigate }) {
 				? '<span class="ami-chip ami-chip--passed">Passed</span>'
 				: isVacant
 					? '<span class="ami-chip ami-chip--vacant">Vacant</span>'
-					: badge(p.currentCategory);
+					: badge(p.currentCategory, p.currentStatus);
 
 			row.innerHTML = `
 				<span class="ami-plot-row__number">${escapeHtml(p.plotNumber)}</span>
@@ -165,6 +264,13 @@ export async function render({ roundId }, { mount, navigate }) {
 		teardownMap();
 		const token = ++mapToken;
 		viewport.innerHTML = '';
+
+		const shown = visiblePlots();
+		if (plots.length && !shown.length) {
+			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(s.filterEmpty)}</div>`;
+			return;
+		}
+
 		const host = document.createElement('div');
 		viewport.appendChild(host);
 
@@ -174,7 +280,7 @@ export async function render({ roundId }, { mount, navigate }) {
 			if (token !== mapToken) return; // toggled away while importing
 			handle = await mod.renderPlotMap(host, {
 				round,
-				plots,
+				plots: shown,
 				tile: (data.map || {}).tile,
 				navigate,
 				strings: s,
@@ -202,7 +308,8 @@ export async function render({ roundId }, { mount, navigate }) {
 		if (!btn) return;
 		[...tabs.children].forEach((b) => b.classList.toggle('ami-tabs__btn--active', b === btn));
 		lastView[round.id] = btn.dataset.view;
-		(btn.dataset.view === 'map' ? renderMap : renderList)();
+		currentView = btn.dataset.view;
+		(currentView === 'map' ? renderMap : renderList)();
 	});
 
 	// Open the remembered tab (default List). initialView was derived from
@@ -210,9 +317,27 @@ export async function render({ roundId }, { mount, navigate }) {
 	(initialView === 'map' ? renderMap : renderList)();
 }
 
-function badge(category) {
-	const [cls, label] = badgeMeta(category, s);
+function badge(category, status) {
+	const [cls, label] = badgeMeta(category, s, status);
 	return `<span class="ami-badge ${cls}">${label}</span>`;
+}
+
+/**
+ * Chip label for a filter bucket. Same wording as the website's round screen,
+ * except that the field app says "Pass" where the website says "Compliant" —
+ * "Pass" is what the inspector taps when recording, so it is the word they
+ * already have in hand.
+ */
+function filterLabel(key) {
+	const labels = {
+		non_compliant:   s.statusNonCompliant,
+		compliant:       s.cat1,
+		exempt:          s.statusExempt,
+		new_tenant:      s.statusNewTenant,
+		internal_review: s.statusUnderReview,
+		none:            s.notInspected,
+	};
+	return labels[key] || key;
 }
 
 function escapeHtml(str) {
