@@ -27,10 +27,18 @@ let inFlight = null;
 let lastError = null;
 export function getLastError() { return lastError; }
 
-// Build tag, baked into this module so the on-screen diagnostic proves at a
-// glance whether the device is actually running the latest code (vs a stale
-// HTTP-cached copy). Bump with the plugin version.
-export const BUILD = '1.4.4';
+// Build tag, baked into this module — NOT read from window.amiData — so the
+// on-screen diagnostic proves at a glance whether the device is running the
+// latest code (vs a stale HTTP-cached copy). Sourcing it from the server would
+// defeat it: the shell is fetched network-first, so it would report the fresh
+// version even while the device ran a cached module.
+//
+// Being hand-maintained, it drifts, and a drifted build tag is worse than none:
+// it stayed at 1.4.4 from 5 July while AMI_VERSION went to 1.5.0, so every
+// release after that told the inspector it was running July's code and no one
+// could tell a stale phone from a current one. Test_Build_Tag now fails the
+// suite when this and AMI_VERSION disagree — bump BOTH or neither.
+export const BUILD = '1.6.0';
 
 /**
  * Full queue snapshot for the on-screen diagnostic (tap the status pill).
