@@ -65,11 +65,9 @@ export async function render({ roundId }, { mount, navigate }) {
 	// Reopen the tab the inspector last used for this round (default List).
 	const initialView = lastView[round.id] === 'map' ? 'map' : 'list';
 
-	const typeLabel = round.inspectionType === 'followup' ? 'Follow-up' : 'First round';
-
 	mount.appendChild(renderHeader({
 		title: round.roundNumber,
-		subtitle: `${typeLabel} · ${round.siteSection}`,
+		subtitle: round.siteSection,
 		showBack: true,
 		onBack: () => navigate('/'),
 	}));
@@ -78,20 +76,19 @@ export async function render({ roundId }, { mount, navigate }) {
 	main.className = 'ami-main';
 	mount.appendChild(main);
 
-	// Progress counts only the plots this round actually re-inspects. On a
-	// follow-up the list also carries the rest of the section, faded, so the
-	// inspector can orient themselves — counting those would put the whole
-	// section back in the denominator, which is the bug fixed twice already
-	// (ams#850, ams#860). `inScope` is undefined on a cached response from
-	// before this change; treat that as in-scope so an old payload still shows
-	// the progress it always did.
-	const scoped = plots.filter((p) => p.inScope !== false);
-	const inspected = scoped.filter((p) => p.currentFindingId).length;
+	// A round covers its whole section (#883), so the denominator is simply the
+	// section — there is no longer a re-inspected subset to count against, and
+	// no faded remainder to keep out of it.
+	//
+	// Progress is deliberately NOT the filter's business: it reports the round,
+	// so filtering to the non-compliant plots must not make the round look
+	// nearly done. It reads `plots`, never visiblePlots().
+	const inspected = plots.filter((p) => p.currentFindingId).length;
 	const progress = document.createElement('div');
 	progress.style.marginBottom = '12px';
 	progress.innerHTML = `
-		<div class="ami-card__detail">${s.progress.replace('%d', inspected).replace('%d', scoped.length)}</div>
-		<div class="ami-progress-bar"><div class="ami-progress-bar__fill" style="width:${scoped.length ? Math.round((inspected / scoped.length) * 100) : 0}%"></div></div>
+		<div class="ami-card__detail">${s.progress.replace('%d', inspected).replace('%d', plots.length)}</div>
+		<div class="ami-progress-bar"><div class="ami-progress-bar__fill" style="width:${plots.length ? Math.round((inspected / plots.length) * 100) : 0}%"></div></div>
 	`;
 	main.appendChild(progress);
 
@@ -208,46 +205,22 @@ export async function render({ roundId }, { mount, navigate }) {
 			return;
 		}
 
-		// On a follow-up, say up front how many of the listed plots actually need
-		// re-inspecting — the list is now mostly context, so the count is not
-		// something the inspector can read off its length any more.
-		if (round.inspectionType === 'followup') {
-			const note = document.createElement('div');
-			note.className = 'ami-scope-note';
-			note.textContent = scoped.length
-				? `${scoped.length} plot${scoped.length === 1 ? '' : 's'} to re-inspect. The rest are shown faded, for orientation.`
-				: 'No plots from the first round need a follow-up. The section is shown for reference.';
-			viewport.appendChild(note);
-		}
-
 		for (const p of shown) {
+			// A vacant plot is shown but not inspectable — there is no tenant to
+			// record against and create_finding would reject it — so it renders as
+			// a plain div, with no button and no navigation.
 			const isVacant = !!p.isVacant;
-			// Out of scope: on a follow-up round, a plot the first round passed. It
-			// is listed so the inspector can place themselves while walking, but it
-			// is not being re-inspected — so it is not recordable, and the server
-			// refuses a finding on it regardless of what the UI allows.
-			const outOfScope = p.inScope === false;
-			// Neither vacant nor out-of-scope plots are inspectable: a plain div
-			// (no button, no navigation) so the inspector sees the plot without
-			// being able to open a finding the server would reject.
-			const inert = isVacant || outOfScope;
-			const row = document.createElement(inert ? 'div' : 'button');
-			row.className = 'ami-plot-row'
-				+ (outOfScope ? ' ami-plot-row--out-of-scope' : '')
-				+ (isVacant ? ' ami-plot-row--vacant' : '');
-			if (!inert) {
+			const row = document.createElement(isVacant ? 'div' : 'button');
+			row.className = 'ami-plot-row' + (isVacant ? ' ami-plot-row--vacant' : '');
+			if (!isVacant) {
 				row.type = 'button';
 				row.onclick = () => navigate(`/round/${round.id}/plot/${p.id}`);
 			}
 
 			const newChip = p.isNewTenant ? '<span class="ami-chip ami-chip--new">New</span>' : '';
-			// Out of scope wins the trailing slot: "Passed" explains why the row is
-			// inert, where a category badge would read as this round's result.
-			const trailing = outOfScope
-				? '<span class="ami-chip ami-chip--passed">Passed</span>'
-				: isVacant
-					? '<span class="ami-chip ami-chip--vacant">Vacant</span>'
-					: badge(p.currentCategory, p.currentStatus);
+			const trailing = isVacant
+				? '<span class="ami-chip ami-chip--vacant">Vacant</span>'
+				: badge(p.currentCategory, p.currentStatus);
 
 			row.innerHTML = `
 				<span class="ami-plot-row__number">${escapeHtml(p.plotNumber)}</span>
