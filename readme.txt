@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,10 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.6.1 =
+* Round cards and the round header no longer carry a "First round" tag. A round covers a whole section for a season now, so there is no first-versus-follow-up distinction left for it to draw — it had been showing "First round" on every round regardless.
+* Removed the faded "passed the first round" rows from the plot list and map. They belonged to the retired follow-up rounds; every plot in a round is inspectable, so nothing rendered that way any more.
 
 = 1.6.0 =
 * Filter a round's plot list. A row of chips above the list — Non-compliant, Pass, Exempt, New tenant, Under review, Not inspected — narrows both the List and the Map to the plots you want; tap more than one to combine them, or "All" to clear. Your choice is remembered per round, so recording a finding and coming back keeps the filter you were working to. The buckets are the ones the committee's round screen on the website uses, so both read the same.

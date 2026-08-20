@@ -54,13 +54,9 @@ export async function render(_params, { mount, navigate }) {
 		card.onclick = () => navigate('/round/' + r.id);
 
 		const pct = r.totalPlots > 0 ? Math.min(100, Math.round((r.inspectedPlots / r.totalPlots) * 100)) : 0;
-		const typeLabel = r.inspectionType === 'followup' ? 'Follow-up' : 'First round';
-		const typeClass = r.inspectionType === 'followup' ? 'ami-round-type--followup' : 'ami-round-type--primary';
-
 		card.innerHTML = `
 			<div class="ami-card__top">
 				<span class="ami-card__title">${escapeHtml(r.roundNumber)}</span>
-				<span class="ami-round-type ${typeClass}">${typeLabel}</span>
 			</div>
 			<div class="ami-card__meta">${escapeHtml(r.siteSection)} · ${escapeHtml(formatDate(r.scheduledStartDate))}</div>
 			<div class="ami-card__detail">${formatProgress(r.inspectedPlots, r.totalPlots)}</div>

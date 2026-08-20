@@ -85,22 +85,6 @@ final class Inspect_Ajax {
 			\wp_send_json_error( [ 'message' => \__( 'Inspections module unavailable.', 'allotment-manager-inspections' ) ], 500 );
 		}
 
-		// A follow-up round's list now carries the WHOLE section so the inspector
-		// can orient themselves (#43), which means it also carries plots that are
-		// not being re-inspected. The app renders those unclickable, but the app
-		// is an offline PWA: a cached page from before this change, or a queued
-		// finding recorded against a stale list, would post here regardless. So
-		// scope is enforced on the server and the faded row is only an affordance.
-		if ( ! self::plot_is_in_scope( $round_id, $plot_id ) ) {
-			\wp_send_json_error(
-				[
-					'message' => \__( 'This plot passed the first round, so it is not part of this follow-up. It is shown for orientation only.', 'allotment-manager-inspections' ),
-					'code'    => 'plot_not_in_scope',
-				],
-				400
-			);
-		}
-
 		$category = isset( $_POST['compliance_category'] ) ? \sanitize_key( $_POST['compliance_category'] ) : '';
 		$status   = isset( $_POST['compliance_status'] ) ? \sanitize_key( $_POST['compliance_status'] ) : '';
 		$notes    = isset( $_POST['findings_summary'] ) ? \sanitize_textarea_field( \wp_unslash( $_POST['findings_summary'] ) ) : '';
@@ -455,8 +439,8 @@ final class Inspect_Ajax {
 	 * time. The photos are the useful part on site — a before-and-after against
 	 * what they are looking at.
 	 *
-	 * Returns null for a primary round (there is no previous), for an unscoped
-	 * follow-up, and for a plot the parent never recorded.
+	 * Returns null when the plot has no first visit in this round — which is
+	 * every plot until it is inspected once.
 	 *
 	 * @since #43
 	 * @param int $round_id The CURRENT round.
@@ -554,70 +538,27 @@ final class Inspect_Ajax {
 	}
 
 	/**
-	 * Whether a plot may be recorded against on a given round.
+	 * Every plot in the round's section.
 	 *
-	 * Everything in the section is in scope for a primary round. For a follow-up
-	 * only the plots its parent FLAGGED are — the rest appear in the list purely
-	 * so the inspector can orient themselves while walking (#43), and recording
-	 * against one would put a finding on a plot that passed the first round.
+	 * A round is one per (year, site) and covers its whole section (#883), so
+	 * there is no subset to select: a re-inspection is visit 2 within this same
+	 * round, not a round of its own. The follow-up branch that selected only the
+	 * flagged plots — and the `in_scope` flag the app faded the rest with — are
+	 * gone with it.
 	 *
-	 * "Flagged" is the same predicate the list and the denominator use:
-	 * `requires_followup = 1` on a non-voided finding of the parent round. Any
-	 * change here must move in step with fetch_plot_rows() and with the main
-	 * plugin's `count_followup_scope_plots()`, or the three disagree about what
-	 * the round covers.
+	 * Worth keeping from that branch, because it is a live trap on this table:
+	 * "did this plot fail?" is `requires_followup = 1` on a non-voided finding,
+	 * NOT `compliance_category IN ('category_2', 'category_3')`. Category
+	 * measures CULTIVATION and is independent of compliance — a plot failed for
+	 * rubbish, derelict structures or a tenancy breach while well cultivated is
+	 * Category 1 — and it is nullable besides. Selecting on it silently dropped
+	 * a plot from its own follow-up in the live 2026 round (#39).
 	 *
-	 * Fails OPEN for a round that cannot be read at all (missing row): that is
-	 * not a scope decision, and Inspection_Finding::create_finding() will reject
-	 * an invalid round on its own with a better message.
-	 *
-	 * @since #43
-	 * @param int $round_id Round being recorded against.
-	 * @param int $plot_id  Plot being recorded.
-	 * @return bool True when a finding may be recorded.
-	 */
-	private static function plot_is_in_scope( int $round_id, int $plot_id ): bool {
-		// A round is one per (year, site) and covers its whole section, so every
-		// plot in it is in scope. The follow-up round that scoped a flagged
-		// subset is gone (#883): a re-inspection is visit 2 within this round.
-		unset( $round_id, $plot_id );
-
-		return true;
-	}
-
-
-	/**
-	 * The plots in scope for a round.
-	 *
-	 * Primary round: every plot in the round's site_section.
-	 *
-	 * Follow-up round: ONLY the plots the parent round flagged for
-	 * re-inspection. The second visit of a season exists to re-check what failed
-	 * the first time; every other plot is deliberately absent from the list, not
-	 * merely de-emphasised.
-	 *
-	 * "Flagged" is `prev.requires_followup = 1` — the flag the finding itself
-	 * carries, set by Inspection_Finding whenever a finding is recorded
-	 * non-compliant. It is NOT `compliance_category IN ('category_2',
-	 * 'category_3')`, which is what this query used until #39 and which is the
-	 * wrong axis: category measures CULTIVATION (Category 1 is >= 75% cultivated)
-	 * and is independent of compliance status, so a plot failed for rubbish,
-	 * derelict structures, or a tenancy breach while being well cultivated is
-	 * Category 1 and was silently dropped from its own follow-up round. There was
-	 * one such plot in the live 2026 round. `compliance_category` is also
-	 * nullable, so a non-compliant finding recorded without a cultivation
-	 * percentage vanished the same way.
-	 *
-	 * Voided findings are excluded: a finding is voided when the membership ends
-	 * mid-round, so there is no live non-compliance left to re-inspect and the
-	 * plot must not be dragged into the follow-up on a departed member's record.
-	 *
-	 * A round covers its whole section (#883).
-	 * {@see list_plots()} refuses it rather than reaching this method — until #40
-	 * it fell through to the primary branch and listed the whole section, which is
-	 * how the live 2026 follow-ups came to show every tenant on the site. The
-	 * caller checks it, not this method, so the failure is an explicit error to
-	 * the inspector rather than an empty list they would read as "nothing to do".
+	 * Each finding join resolves to ONE row (`id = (SELECT MAX/MIN ...)`). A
+	 * plain (plot_id, round_id) match is one-to-many, which duplicates the PLOT
+	 * ROW rather than adding columns — a subdivided plot legitimately holds one
+	 * finding per subdivision in a round, and the inspector saw it listed twice
+	 * (#44).
 	 *
 	 * Ordering is {@see plot_number_order_sql()}, NOT the list's original
 	 * `LENGTH(plot_number), plot_number`. See that method for why.
@@ -658,8 +599,7 @@ final class Inspect_Ajax {
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
 					curr.compliance_status AS current_status,
-					prev.compliance_category AS previous_category,
-					1 AS in_scope
+					prev.compliance_category AS previous_category
 				FROM {$plots_table} p
 				{$holder_join}
 				LEFT JOIN {$map_obj_table} mo ON mo.plot_id = p.id AND mo.object_type = 'plot'
@@ -737,14 +677,8 @@ final class Inspect_Ajax {
 			// axes are independent (see fetch_plot_rows()). Null when the plot
 			// has no finding in this round.
 			'currentStatus'     => $row->current_status ?? null,
-			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
-			// Whether this plot is actually being re-inspected on THIS round. On a
-			// follow-up the list carries the whole section so the inspector can
-			// orient themselves, but only the plots the parent flagged are in
-			// scope; the rest are shown faded and are not recordable (#43).
-			// Always true on a primary round. Defaults true for older-shaped rows
-			// so a caller that predates the column is not silently un-scoped.
-			'inScope'           => ! isset( $row->in_scope ) || (bool) $row->in_scope,
+			// Visit 1 of THIS round — the work order a re-inspection is against.
+			'previousCategory'  => $row->previous_category,
 			// Plot footprint from the admin Map Editor (wp_am_map_objects): the
 			// centroid plus the box width/height (pixels at zoom 19) and rotation
 			// (degrees). The map draws the plot's real rotated rectangle from

@@ -63,7 +63,11 @@
 // non-compliant plots" answers the same on a phone in the field as it does at
 // the desk. The list also reads compliance_status now, so an exempt or
 // under-review plot no longer renders as "Not inspected".
-const VERSION = 'v30';
+// 'v31' the round-type chip ("First round", on every card and round header) is
+// gone: ams#883 made a round one per (year, site), list_rounds stopped
+// returning inspectionType, and the label had been defaulting to a distinction
+// that no longer exists. The faded out-of-scope rendering went with it.
+const VERSION = 'v31';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;

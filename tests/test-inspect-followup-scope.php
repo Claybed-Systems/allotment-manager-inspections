@@ -46,7 +46,6 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 			'map_objects' => $wpdb->prefix . 'am_map_objects',
 			'assignments' => $wpdb->prefix . 'am_plot_assignments',
 			'members'     => $wpdb->prefix . 'mm_members',
-			'rounds'      => $wpdb->prefix . 'am_inspection_rounds',
 			'photos'      => $wpdb->prefix . 'am_inspection_photos',
 		);
 
@@ -127,23 +126,6 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 				user_id bigint(20) UNSIGNED DEFAULT NULL,
 				first_name varchar(100) DEFAULT NULL,
 				last_name varchar(100) DEFAULT NULL,
-				PRIMARY KEY (id)
-			)",
-			// Only what plot_is_in_scope() reads, plus round_number. The list-scope
-			// tests pass round rows in by hand; the save-guard has to look one up
-			// for itself.
-			//
-			// round_number is here because the REAL table carries it NOT NULL with
-			// a UNIQUE key, and wpdb strips STRICT_TRANS_TABLES — so an insert that
-			// omits it silently writes '' and the SECOND fixture round collides on
-			// the unique index rather than erroring. The failure then looks like a
-			// scope bug (round not found, guard fails open) rather than a fixture
-			// one, which is exactly how it presented.
-			'rounds'      => "(
-				id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-				round_number varchar(50) NOT NULL DEFAULT '',
-				inspection_type varchar(20) NOT NULL DEFAULT 'primary',
-				parent_round_id bigint(20) UNSIGNED DEFAULT NULL,
 				PRIMARY KEY (id)
 			)",
 		);
@@ -244,25 +226,16 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		return array_map( static fn( $row ) => (string) $row->plot_number, $rows );
 	}
 
-	private function followup_round( int $parent_round_id, int $id = 200 ): object {
-		return (object) array(
-			'id'              => $id,
-			'round_number'    => '2026-08-Burnside-Followup',
-			'site_section'    => 'Burnside',
-			'inspection_type' => 'followup',
-			'parent_round_id' => $parent_round_id,
-			'status'          => 'scheduled',
-		);
-	}
-
+	/**
+	 * A round row shaped as fetch_plot_rows() reads it: id + site_section, which
+	 * is all a round is to the plot list now that one covers its whole section.
+	 */
 	private function primary_round( int $id = 100 ): object {
 		return (object) array(
-			'id'              => $id,
-			'round_number'    => '2026-06-Burnside-Primary',
-			'site_section'    => 'Burnside',
-			'inspection_type' => 'primary',
-			'parent_round_id' => null,
-			'status'          => 'scheduled',
+			'id'           => $id,
+			'round_number' => '2026-06-Burnside',
+			'site_section' => 'Burnside',
+			'status'       => 'scheduled',
 		);
 	}
 
@@ -368,68 +341,6 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 		);
 	}
 
-	// ---- the whole section, with scope flagged (#43) ------------------------
-
-	/**
-	 * @return array<string,bool> plot_number => inScope, in list order.
-	 */
-	private function scope_map_for( object $round ): array {
-		$m = new ReflectionMethod( Inspect_Ajax::class, 'fetch_plot_rows' );
-		$m->setAccessible( true );
-		$format = new ReflectionMethod( Inspect_Ajax::class, 'format_plot_row' );
-		$format->setAccessible( true );
-
-		$out = array();
-		foreach ( $m->invoke( null, $round ) as $row ) {
-			$formatted = $format->invoke( null, $row );
-			$out[ (string) $formatted['plotNumber'] ] = $formatted['inScope'];
-		}
-		return $out;
-	}
-
-	// ---- the save guard (#43) -----------------------------------------------
-
-	/**
-	 * @param string   $type      'primary' or 'followup'.
-	 * @param int|null $parent_id Parent round for a follow-up.
-	 * @return int Round id.
-	 */
-	private int $round_seq = 0;
-
-	private function insert_round( string $type, ?int $parent_id = null, int $id = 0 ): int {
-		global $wpdb;
-		$data = array(
-			// Unique per fixture round: the real table's round_number is NOT NULL
-			// with a UNIQUE key. See the DDL note.
-			'round_number'    => 'FIXTURE-' . $type . '-' . ( ++$this->round_seq ),
-			'inspection_type' => $type,
-			'parent_round_id' => $parent_id,
-		);
-		if ( $id > 0 ) {
-			$data['id'] = $id;
-		}
-		$wpdb->insert( self::$tables['rounds'], $data );
-		$this->assertSame( '', $wpdb->last_error, 'round fixture insert: ' . $wpdb->last_error );
-
-		return $id > 0 ? $id : (int) $wpdb->insert_id;
-	}
-
-	private function in_scope( int $round_id, int $plot_id ): bool {
-		$m = new ReflectionMethod( Inspect_Ajax::class, 'plot_is_in_scope' );
-		$m->setAccessible( true );
-		return (bool) $m->invoke( null, $round_id, $plot_id );
-	}
-	// ---- the first round's result, on the follow-up screen (#43) ------------
-
-	/**
-	 * @return array<string,mixed>|null
-	 */
-	private function previous_finding_for( int $round_id, int $plot_id ): ?array {
-		$m = new ReflectionMethod( Inspect_Ajax::class, 'previous_finding' );
-		$m->setAccessible( true );
-		return $m->invoke( null, $round_id, $plot_id );
-	}
-
 	// ---- plot order (#42) ---------------------------------------------------
 
 	/**
@@ -477,13 +388,5 @@ class Test_Inspect_Followup_Scope extends WP_UnitTestCase {
 			array( 'B3', 'B3.1', 'B3.2' ),
 			$this->plot_numbers_for( $this->primary_round( 100 ) )
 		);
-	}
-
-	// ---- the unscoped-follow-up guard (#40) --------------------------------
-
-	private function is_unscoped( object $round ): bool {
-		$m = new ReflectionMethod( Inspect_Ajax::class, 'is_unscoped_followup' );
-		$m->setAccessible( true );
-		return (bool) $m->invoke( null, $round );
 	}
 }
