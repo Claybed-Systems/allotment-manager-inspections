@@ -265,35 +265,38 @@ body {
 	font-size: 12px;
 	font-weight: 600;
 }
-.ami-badge--none {
-	background: var(--ami-muted);
-	color: var(--ami-fg-soft);
-}
-.ami-badge--cat1 {
+/* Badge colours are the MAP's palette (plot-map.js MARKER_STYLE), one tint
+   lighter for text-on-chip: same three verdicts, same three hues, so a plot's
+   polygon and its badge never disagree. Classes are named for the status
+   bucket, not the cultivation category — a Cat 2 and a Cat 3 share the
+   non-compliant red and differ only in their label.
+   All six pairs clear WCAG AA (>= 4.5:1) at the 12px bold this chip uses. */
+.ami-badge--compliant {
 	background: #e2efe4;
 	color: #2d6e3a;
 }
-.ami-badge--cat2 {
-	background: #fff1d6;
-	color: #8a5d1d;
+.ami-badge--non-compliant {
+	background: #fbe0dd;
+	color: #b03a2e;
 }
-.ami-badge--cat3 {
-	background: #fadcd0;
-	color: #7a3320;
-}
-/* Verdicts that carry no cultivation category. Deliberately quieter than the
-   graded three: they report a committee decision, not a walk-round result. */
 .ami-badge--exempt {
-	background: var(--ami-muted);
-	color: var(--ami-fg-soft);
-}
-.ami-badge--newtenant {
 	background: #e8f1fa;
 	color: #1f5d8a;
 }
-.ami-badge--review {
+/* A new tenant inside the grace period is auto-exempted by the server — the
+   same state to an inspector, so the same colour. */
+.ami-badge--new-tenant {
+	background: #e8f1fa;
+	color: #1f5d8a;
+}
+/* Not a verdict yet: amber reads as pending against the settled three. */
+.ami-badge--internal-review {
 	background: #fff1d6;
 	color: #8a5d1d;
+}
+.ami-badge--none {
+	background: var(--ami-muted);
+	color: var(--ami-fg-soft);
 }
 
 /* ===== Plot-list filter ===== */
@@ -338,8 +341,8 @@ body {
 /* The one bucket that is a work queue rather than a category gets its own
    colour when ticked — it is the reason the filter exists. */
 .ami-filter__chip--non-compliant.ami-filter__chip--on {
-	background: #7a3320;
-	border-color: #7a3320;
+	background: #b03a2e;
+	border-color: #b03a2e;
 }
 
 /* ===== Tabs (list/map toggle) ===== */

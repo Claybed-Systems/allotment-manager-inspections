@@ -31,22 +31,20 @@ export function badgeMeta(category, strings, status) {
 
 	switch (status) {
 		case 'compliant':
-			return ['ami-badge--cat1', s.cat1];
+			return [badgeClass('compliant'), s.cat1];
 		case 'non_compliant':
-			// Keep the Cat 2 / Cat 3 marker where there is one: on a re-inspection
-			// round it is what tells the inspector how bad the plot was last time
-			// (#43). Where there is none — a Category 1 or uncategorised failure —
-			// say so plainly rather than borrowing a severity the finding
-			// does not carry.
-			if (category === 'category_2') return ['ami-badge--cat2', s.cat2];
-			if (category === 'category_3') return ['ami-badge--cat3', s.cat3];
-			return ['ami-badge--cat3', s.statusNonCompliant];
+			// Colour says non-compliant; the LABEL carries the severity. Cat 2 and
+			// Cat 3 are one colour here and one colour on the map, because "who do
+			// I need to see?" is one question — see plot-map.js MARKER_STYLE.
+			if (category === 'category_2') return [badgeClass('non_compliant'), s.cat2];
+			if (category === 'category_3') return [badgeClass('non_compliant'), s.cat3];
+			return [badgeClass('non_compliant'), s.statusNonCompliant];
 		case 'exempt':
-			return ['ami-badge--exempt', s.statusExempt];
+			return [badgeClass('exempt'), s.statusExempt];
 		case 'new_tenant':
-			return ['ami-badge--newtenant', s.statusNewTenant];
+			return [badgeClass('new_tenant'), s.statusNewTenant];
 		case 'internal_review':
-			return ['ami-badge--review', s.statusUnderReview];
+			return [badgeClass('internal_review'), s.statusUnderReview];
 		default:
 			break;
 	}
@@ -55,11 +53,28 @@ export function badgeMeta(category, strings, status) {
 	// `currentStatus` was added. Fall back to the category-only mapping this
 	// badge used to have, so a phone with no signal still labels its rows.
 	const byCategory = {
-		category_1: ['ami-badge--cat1', s.cat1],
-		category_2: ['ami-badge--cat2', s.cat2],
-		category_3: ['ami-badge--cat3', s.cat3],
+		category_1: [badgeClass('compliant'), s.cat1],
+		category_2: [badgeClass('non_compliant'), s.cat2],
+		category_3: [badgeClass('non_compliant'), s.cat3],
 	};
-	return byCategory[category] || ['ami-badge--none', s.notInspected];
+	return byCategory[category] || [badgeClass('none'), s.notInspected];
+}
+
+/**
+ * The CSS class for a status bucket.
+ *
+ * Named for the BUCKET, not the cultivation category. The classes used to be
+ * --cat1/--cat2/--cat3, which stopped describing what they coloured the moment
+ * a Cat 2 and a Cat 3 became the same red: a reader had to know that --cat2
+ * was not, in fact, a Cat 2 colour. Derived here so the class is always
+ * `ami-badge--` + the bucket statusBucket() returns, and the badge, the filter
+ * chip and the map polygon cannot drift apart.
+ *
+ * @param {string} bucket A statusBucket() value.
+ * @returns {string} CSS class.
+ */
+function badgeClass(bucket) {
+	return 'ami-badge--' + bucket.replace(/_/g, '-');
 }
 
 /**
