@@ -657,6 +657,7 @@ final class Inspect_Ajax {
 					mo.rotation_angle,
 					curr.id AS current_finding_id,
 					curr.compliance_category AS current_category,
+					curr.compliance_status AS current_status,
 					prev.compliance_category AS previous_category,
 					1 AS in_scope
 				FROM {$plots_table} p
@@ -728,6 +729,14 @@ final class Inspect_Ajax {
 			'tenantStartDate'   => $start_date,
 			'currentFindingId'  => $row->current_finding_id ? (int) $row->current_finding_id : null,
 			'currentCategory'   => $row->current_category,   // category_1|2|3 or null
+			// The verdict the committee's own screens filter and badge by.
+			// Category measures CULTIVATION and is NULL on an exempt or
+			// under-review finding, so a list that reads only the category
+			// cannot tell "not inspected" from "inspected and exempted", and
+			// cannot answer "show me the non-compliant plots" at all — the two
+			// axes are independent (see fetch_plot_rows()). Null when the plot
+			// has no finding in this round.
+			'currentStatus'     => $row->current_status ?? null,
 			'previousCategory'  => $row->previous_category,  // for followup rounds, the parent finding's category
 			// Whether this plot is actually being re-inspected on THIS round. On a
 			// follow-up the list carries the whole section so the inspector can

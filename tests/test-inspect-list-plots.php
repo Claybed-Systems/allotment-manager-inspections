@@ -45,6 +45,7 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 				'rotation_angle'     => '281.40',
 				'current_finding_id' => null,
 				'current_category'   => null,
+				'current_status'     => null,
 				'previous_category'  => null,
 			),
 			$overrides
@@ -243,6 +244,78 @@ class Test_Inspect_List_Plots extends WP_UnitTestCase {
 		$out = $this->call_format( $this->row( array( 'holder_user_id' => 7 ) ) );
 
 		$this->assertFalse( $out['isOwnPlot'] );
+	}
+
+	/**
+	 * The plot list must carry compliance_status, not the category alone.
+	 *
+	 * The two axes are independent: the category measures CULTIVATION and is
+	 * NULL on an exempt or under-review finding, so a list that reads only the
+	 * category cannot tell "not inspected" from "inspected and exempted", and
+	 * cannot answer "show me the non-compliant plots" — the question the
+	 * committee's own round screen is built around.
+	 */
+	public function test_plot_carries_its_compliance_status(): void {
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_finding_id' => 501,
+					'current_category'   => 'category_3',
+					'current_status'     => 'non_compliant',
+				)
+			)
+		);
+
+		$this->assertSame( 'non_compliant', $out['currentStatus'] );
+		$this->assertSame( 'category_3', $out['currentCategory'] );
+		$this->assertSame( 501, $out['currentFindingId'] );
+	}
+
+	/**
+	 * An exempt finding has a status but NO cultivation category.
+	 *
+	 * This is the row that used to render as "Not inspected" on the field app
+	 * while the website showed it as Exempt.
+	 */
+	public function test_exempt_finding_has_status_without_category(): void {
+		$out = $this->call_format(
+			$this->row(
+				array(
+					'current_finding_id' => 502,
+					'current_category'   => null,
+					'current_status'     => 'exempt',
+				)
+			)
+		);
+
+		$this->assertSame( 'exempt', $out['currentStatus'] );
+		$this->assertNull( $out['currentCategory'] );
+	}
+
+	/**
+	 * A plot with no finding in this round carries no status at all.
+	 */
+	public function test_uninspected_plot_has_null_status(): void {
+		$out = $this->call_format( $this->row() );
+
+		$this->assertNull( $out['currentStatus'] );
+		$this->assertNull( $out['currentFindingId'] );
+	}
+
+	/**
+	 * A row shaped before the column existed must not fatal.
+	 *
+	 * format_plot_row() is fed straight from a wpdb result, and the app also
+	 * replays cached payloads; an absent property has to read as "unknown",
+	 * not as an undefined-property error.
+	 */
+	public function test_row_without_the_status_column_degrades_to_null(): void {
+		$row = $this->row();
+		unset( $row->current_status );
+
+		$out = $this->call_format( $row );
+
+		$this->assertNull( $out['currentStatus'] );
 	}
 
 	public function test_tile_config_is_well_formed(): void {

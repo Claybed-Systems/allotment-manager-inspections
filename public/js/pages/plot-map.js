@@ -18,14 +18,34 @@
 
 import { badgeMeta } from '../components/badge.js';
 
-// Circle-marker styling per compliance category. Hexes mirror the .ami-badge
-// rules in inspect.css so the map and the list agree at a glance.
+// Plot styling per verdict. Hexes mirror the .ami-badge rules in inspect.css so
+// the map and the list agree at a glance — including `review`, which shares the
+// amber of Cat 2 there and so shares it here; the popup's badge names it.
 const MARKER_STYLE = {
 	category_1: { color: '#2d6e3a', fillColor: '#6aa56f' }, // Pass — green
 	category_2: { color: '#8a5d1d', fillColor: '#e8a64e' }, // Cat 2 — amber
 	category_3: { color: '#7a3320', fillColor: '#c86f4a' }, // Cat 3 — terracotta
-	_none:      { color: '#777777', fillColor: '#bdbdbd' }, // Not inspected — grey
+	exempt:     { color: '#8c8f94', fillColor: '#c9ccd0' }, // Exempt — slate
+	newtenant:  { color: '#1f5d8a', fillColor: '#79a9cd' }, // New tenant — blue
+	review:     { color: '#8a5d1d', fillColor: '#e8a64e' }, // Under review — amber
+	none:       { color: '#777777', fillColor: '#bdbdbd' }, // Not inspected — grey
 };
+
+// Fallback for an unrecognised key.
+MARKER_STYLE._none = MARKER_STYLE.none;
+
+/**
+ * The MARKER_STYLE key for a plot, on the same status-first axis as the badge.
+ *
+ * Colouring by `compliance_category` alone drew a Category 1 plot failed for
+ * rubbish as a green "pass" while its own popup badge said Non-compliant — the
+ * two axes are independent, see components/badge.js. Derived from badgeMeta()'s
+ * CSS class so there is one decision, not two that can drift.
+ */
+function styleKeyFor(plot, strings) {
+	const cls = badgeMeta(plot.currentCategory, strings, plot.currentStatus)[0];
+	return cls.replace('ami-badge--', '');
+}
 
 // Loaded once per page; reused across List/Map toggles.
 let leafletPromise = null;
@@ -79,8 +99,8 @@ function ensureLeaflet() {
 	return leafletPromise;
 }
 
-function styleFor(category) {
-	const base = MARKER_STYLE[category] || MARKER_STYLE._none;
+function styleFor(styleKey) {
+	const base = MARKER_STYLE[styleKey] || MARKER_STYLE._none;
 	return {
 		color: base.color,
 		fillColor: base.fillColor,
@@ -92,8 +112,8 @@ function styleFor(category) {
 
 // Polygon styling for a plot footprint — same palette as the markers, but a
 // translucent fill so the satellite imagery shows through.
-function polyStyleFor(category) {
-	const base = MARKER_STYLE[category] || MARKER_STYLE._none;
+function polyStyleFor(styleKey) {
+	const base = MARKER_STYLE[styleKey] || MARKER_STYLE._none;
 	return { color: base.color, weight: 2, fillColor: base.fillColor, fillOpacity: 0.45 };
 }
 
@@ -131,10 +151,12 @@ function rectCorners(plot) {
 }
 
 /**
- * Build the badge element for a category, reusing the existing .ami-badge CSS.
+ * Build the badge element for a plot's verdict, reusing the existing
+ * .ami-badge CSS. Status is passed alongside the category so an exempt or
+ * under-review plot reads as such rather than as "Not inspected".
  */
-function badgeEl(category, strings) {
-	const [cls, label] = badgeMeta(category, strings);
+function badgeEl(category, strings, status) {
+	const [cls, label] = badgeMeta(category, strings, status);
 	const span = document.createElement('span');
 	span.className = 'ami-badge ' + cls;
 	span.textContent = label;
@@ -224,7 +246,7 @@ function buildPopup(plot, round, strings, navigate) {
 
 	const status = document.createElement('div');
 	status.className = 'ami-map-popup__status';
-	status.appendChild(badgeEl(plot.currentCategory, strings));
+	status.appendChild(badgeEl(plot.currentCategory, strings, plot.currentStatus));
 
 	const btn = document.createElement('button');
 	btn.type = 'button';
@@ -243,7 +265,7 @@ function buildLegend(strings) {
 	const legend = document.createElement('div');
 	legend.className = 'ami-map-legend';
 	const items = [
-		['_none', strings.notInspected],
+		['none', strings.notInspected],
 		['category_1', strings.cat1],
 		['category_2', strings.cat2],
 		['category_3', strings.cat3],
@@ -370,7 +392,8 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		// Draw the plot's real footprint (a rotated rectangle that scales with
 		// the map) when we have its dimensions; fall back to a dot otherwise.
 		const corners = rectCorners(plot);
-		const style = corners ? polyStyleFor(plot.currentCategory) : styleFor(plot.currentCategory);
+		const styleKey = styleKeyFor(plot, s);
+		const style = corners ? polyStyleFor(styleKey) : styleFor(styleKey);
 		// Vacant plots are shown but not inspectable — render them faded + dashed
 		// so they read as "known empty", not "occupied, awaiting inspection".
 		if (plot.isVacant) {
