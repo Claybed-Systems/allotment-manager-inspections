@@ -72,7 +72,11 @@
 // blue exempt. Same axis the filter chips use, so filtering to Non-compliant
 // leaves exactly the red plots on screen, and a plot's polygon and its badge
 // can no longer disagree. The legend lists only the colours actually present.
-const VERSION = 'v32';
+// 'v33' a round's plots can be searched by plot number or tenant name, from
+// one box that feeds both the List and the Map (adds js/services/plot-search.js).
+// The Map opens on the lowest-numbered match, so searching a tenant who holds
+// B15, B17 and B19 lands on B15.
+const VERSION = 'v33';
 const SHELL_CACHE = `ami-shell-${VERSION}`;
 const RUNTIME_CACHE = `ami-runtime-${VERSION}`;
 const TILE_CACHE = `ami-tiles-${VERSION}`;
@@ -96,6 +100,7 @@ const PRECACHE_URLS = [
 	`${PLUGIN_BASE}js/services/store.js`,
 	`${PLUGIN_BASE}js/services/sync.js`,
 	`${PLUGIN_BASE}js/services/net.js`,
+	`${PLUGIN_BASE}js/services/plot-search.js`,
 	`${PLUGIN_BASE}vendor/leaflet/leaflet.js`,
 	`${PLUGIN_BASE}vendor/leaflet/leaflet.css`,
 	`${PLUGIN_BASE}manifest.webmanifest`,

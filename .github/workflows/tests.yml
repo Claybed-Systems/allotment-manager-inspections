@@ -75,6 +75,13 @@ jobs:
           WP_TESTS_DIR: /tmp/wordpress-tests-lib
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 latest true
 
+      # The PWA's plot-search matcher is a dependency-free ES module, so Node's
+      # built-in runner tests it with no install step. Quote the glob: bare
+      # `node --test tests/js` matches nothing and exits non-zero.
+      - name: Run PWA JavaScript tests
+        working-directory: allotment-manager-inspections
+        run: node --test "tests/js/*.test.mjs"
+
       - name: Run inspections PHPUnit
         working-directory: allotment-manager-inspections
         env:
