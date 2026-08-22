@@ -299,6 +299,42 @@ body {
 	color: var(--ami-fg-soft);
 }
 
+/* ===== Plot search ===== */
+/* Sits above the filter chips: the coarser cut, and the one an inspector who
+   already knows the plot number reaches for first. */
+.ami-search {
+	margin-bottom: 8px;
+}
+
+.ami-search__input {
+	width: 100%;
+	box-sizing: border-box;
+	/* 44px is the tap target the rest of the field app uses — gloves on, one
+	   hand, standing in a plot. */
+	min-height: 44px;
+	padding: 10px 12px;
+	border: 1px solid var(--ami-border);
+	border-radius: 8px;
+	/* 16px or larger, or iOS Safari zooms the whole page when the field takes
+	   focus and the inspector has to pinch back out to see the list. */
+	font-size: 16px;
+	background: #fff;
+	color: inherit;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.ami-search__input:focus {
+	outline: 2px solid var(--ami-accent);
+	outline-offset: 1px;
+}
+
+/* Keep the native clear (×) on iOS — it is the fastest way back to the whole
+   round, and its `search` event is wired up in plot-picker.js. */
+.ami-search__input::-webkit-search-cancel-button {
+	-webkit-appearance: searchfield-cancel-button;
+}
+
 /* ===== Plot-list filter ===== */
 /* A single scrollable row of chips: on a phone the six buckets do not fit
    across, and wrapping them pushes the list itself below the fold. */

@@ -5,7 +5,7 @@ Tags: allotment, inspection, pwa, mobile
 Requires at least: 6.7
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,12 @@ This plugin assumes the main `allotment-manager` plugin is installed and active 
 3. Visit `/inspect/` while logged in as a committee member.
 
 == Changelog ==
+
+= 1.8.0 =
+* A round's plots can now be searched, from one box above the filter chips. Type a plot number or a tenant's name; the List narrows to the matches and the Map shows the same set, so the two never disagree about what you asked for.
+* On the Map, a search opens on the lowest-numbered match. Searching a tenant who holds B15, B17 and B19 lands on B15, which is where you start walking.
+* The search and the verdict chips compose: search a tenant, then tick Non-compliant, to get just their plots that need seeing. The chip counts follow the search, so they never advertise plots the search has excluded.
+* Your search is remembered per round, like the chips already were, so recording a finding and coming back does not mean typing it again.
 
 = 1.7.0 =
 * The map now colours plots by their compliance status: light green passed, light red non-compliant, light blue exempt (including a new tenant inside the grace period, which the system exempts automatically). Under review stays amber, not yet inspected stays grey.

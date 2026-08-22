@@ -109,6 +109,14 @@ final class Plugin {
 				// Plot-list filter.
 				'filterAll'     => \__( 'All', 'allotment-manager-inspections' ),
 				'filterEmpty'   => \__( 'No plots match that filter.', 'allotment-manager-inspections' ),
+				// Plot search. The three empty states are deliberately distinct:
+				// "no plots match that filter" while the inspector is staring at
+				// a plot number they just typed sends them looking for the wrong
+				// cause.
+				'searchPlaceholder'  => \__( 'Search plot or tenant…', 'allotment-manager-inspections' ),
+				/* translators: %s: the search term the inspector typed. */
+				'searchEmpty'        => \__( 'No plot or tenant matches “%s”.', 'allotment-manager-inspections' ),
+				'searchFilterEmpty'  => \__( 'No plots match that search and filter together.', 'allotment-manager-inspections' ),
 				'list'          => \__( 'List', 'allotment-manager-inspections' ),
 				'map'           => \__( 'Map', 'allotment-manager-inspections' ),
 				'notes'         => \__( 'Notes (shown to the member)', 'allotment-manager-inspections' ),

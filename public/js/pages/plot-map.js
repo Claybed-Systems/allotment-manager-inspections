@@ -11,7 +11,7 @@
  * service worker, so the map works offline once tiles for the area have been
  * seen. Mirrors the main plugin's member-map-view.js.
  *
- * Entry: renderPlotMap(container, { round, plots, tile, navigate, strings }).
+ * Entry: renderPlotMap(container, { round, plots, tile, navigate, strings, focus }).
  * Returns { destroy() } so the caller can tear the Leaflet instance down when
  * the user toggles back to the List.
  */
@@ -55,6 +55,11 @@ const MARKER_STYLE_FALLBACK = MARKER_STYLE.none;
 // not-yet-done. Only the buckets actually on the map are drawn — see
 // buildLegend().
 const LEGEND_ORDER = ['compliant', 'non_compliant', 'exempt', 'new_tenant', 'internal_review', 'none'];
+
+// Zoom used when the map opens on one searched-for plot. 19 is the deepest
+// zoom the tile providers serve (Esri imagery stops there, which is why the
+// layer sets maxNativeZoom), so it is as close as the map goes.
+const FOCUS_ZOOM = 19;
 
 // Loaded once per page; reused across List/Map toggles.
 let leafletPromise = null;
@@ -321,7 +326,7 @@ function renderEmpty(container, strings) {
 /**
  * Render the map. Returns { destroy() }.
  */
-export async function renderPlotMap(container, { round, plots, tile, navigate, strings }) {
+export async function renderPlotMap(container, { round, plots, tile, navigate, strings, focus }) {
 	const s = strings || {};
 	let map = null;
 	let destroyed = false;
@@ -426,8 +431,19 @@ export async function renderPlotMap(container, { round, plots, tile, navigate, s
 		latlngs.push([plot.lat, plot.lng]);
 	}
 
-	// #3 Restore the remembered view for this round; otherwise fit all plots.
-	if (savedView && savedView.roundId === round.id && Array.isArray(savedView.center)) {
+	// A searched-for plot wins over both the remembered view and the fit: the
+	// inspector has just asked for THAT plot by name, so open on it rather than
+	// on wherever they were standing last time. FOCUS_ZOOM is the deepest the
+	// tiles go, which is where a single plot fills the screen.
+	//
+	// The caller picks which plot (the lowest-numbered match); this only has to
+	// honour it. Guarded on real coordinates because a plot with none cannot be
+	// flown to, and setView(NaN) leaves Leaflet with a broken view rather than
+	// throwing.
+	if (focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng)) {
+		map.setView([focus.lat, focus.lng], Math.min(FOCUS_ZOOM, t.maxZoom || FOCUS_ZOOM));
+	} else if (savedView && savedView.roundId === round.id && Array.isArray(savedView.center)) {
+		// #3 Restore the remembered view for this round; otherwise fit all plots.
 		map.setView(savedView.center, savedView.zoom);
 	} else {
 		map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 19 });

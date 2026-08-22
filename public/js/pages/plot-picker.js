@@ -13,6 +13,7 @@
 import * as api from '../services/api.js';
 import { renderHeader } from '../components/header.js';
 import { badgeMeta, statusBucket } from '../components/badge.js';
+import { normaliseQuery, filterPlots, firstMatch } from '../services/plot-search.js';
 
 const s = window.amiData.strings;
 
@@ -42,6 +43,18 @@ const STATUS_FILTERS = [
 // the non-compliant plots should not have to re-tick after every save.
 // Module-scoped so it survives the SPA re-render. roundId -> Set<string>.
 const lastFilter = {};
+
+// Same again for the search term: recording a finding returns here, and an
+// inspector working through one tenant's plots should not have to retype their
+// name after every save. Kept honest by rendering it back INTO the box — a
+// remembered filter the inspector cannot see is a plot list that looks broken.
+// roundId -> string.
+const lastSearch = {};
+
+// Wait this long after the last keystroke before re-rendering. The Map tab
+// rebuilds Leaflet on each render, so searching per-keystroke would tear the
+// map down and back up three times for "B15".
+const SEARCH_DEBOUNCE_MS = 250;
 
 export async function render({ roundId }, { mount, navigate }) {
 	mount.innerHTML = '';
@@ -107,40 +120,114 @@ export async function render({ roundId }, { mount, navigate }) {
 	// they always did.
 	const selected = new Set(lastFilter[round.id] || []);
 
-	const counts = {};
-	for (const key of STATUS_FILTERS) counts[key] = 0;
-	for (const p of plots) {
-		const bucket = statusBucket(p);
-		if (bucket in counts) counts[bucket]++;
-	}
-
 	const filterBar = document.createElement('div');
 	filterBar.className = 'ami-filter';
 	main.appendChild(filterBar);
 
+	// The search box goes ABOVE the chips (hence insertBefore — filterBar is
+	// already in the DOM by here). It is the coarser cut, and on a phone it is
+	// what an inspector who already knows the plot number reaches for first.
+	let searchQuery = normaliseQuery(lastSearch[round.id]);
+
+	const searchBar = document.createElement('div');
+	searchBar.className = 'ami-search';
+	const searchInput = document.createElement('input');
+	searchInput.type = 'search';
+	searchInput.className = 'ami-search__input';
+	searchInput.placeholder = s.searchPlaceholder;
+	searchInput.setAttribute('aria-label', s.searchPlaceholder);
+	searchInput.value = searchQuery;
+	// Phones: the plot number is the common case, and it starts with a letter,
+	// so no numeric keyboard. Autocorrect on a plot number is actively wrong.
+	searchInput.autocapitalize = 'none';
+	searchInput.autocomplete = 'off';
+	searchInput.spellcheck = false;
+	searchBar.appendChild(searchInput);
+	main.insertBefore(searchBar, filterBar);
+
+	let searchTimer = null;
+	function applySearch(raw) {
+		// The debounce can outlive the screen: tap a plot within 250ms of the
+		// last keystroke and this fires after the router has replaced the
+		// mount. Rendering into the detached viewport is invisible, but on the
+		// Map tab it would also build a Leaflet instance with no live handle
+		// to destroy it. The input is our proof the picker is still mounted.
+		if (!searchInput.isConnected) return;
+
+		const next = normaliseQuery(raw);
+		if (next === searchQuery) return; // e.g. trailing space typed
+		searchQuery = next;
+		lastSearch[round.id] = searchQuery;
+		renderFilterBar();
+		(currentView === 'map' ? renderMap : renderList)();
+	}
+	searchInput.addEventListener('input', () => {
+		if (searchTimer) clearTimeout(searchTimer);
+		const value = searchInput.value;
+		searchTimer = setTimeout(() => {
+			searchTimer = null;
+			applySearch(value);
+		}, SEARCH_DEBOUNCE_MS);
+	});
+	// Enter means "now", and dismisses the on-screen keyboard so the inspector
+	// can see the result they just asked for.
+	searchInput.addEventListener('keydown', (e) => {
+		if (e.key !== 'Enter') return;
+		e.preventDefault();
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+			searchTimer = null;
+		}
+		applySearch(searchInput.value);
+		searchInput.blur();
+	});
+	// The native clear (×) fires `search`, not `input`, on iOS Safari.
+	searchInput.addEventListener('search', () => {
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+			searchTimer = null;
+		}
+		applySearch(searchInput.value);
+	});
+
 	function visiblePlots() {
-		if (!selected.size) return plots;
-		return plots.filter((p) => selected.has(statusBucket(p)));
+		const matched = filterPlots(plots, searchQuery);
+		if (!selected.size) return matched;
+		return matched.filter((p) => selected.has(statusBucket(p)));
 	}
 
 	function renderFilterBar() {
 		filterBar.innerHTML = '';
 
+		// Counted over the SEARCHED set, not the whole round: with "lovelace"
+		// typed, "Non-compliant (12)" would be advertising eleven plots the
+		// search has already excluded, and ticking it would show one.
+		const searched = filterPlots(plots, searchQuery);
+		const counts = {};
+		for (const key of STATUS_FILTERS) counts[key] = 0;
+		for (const p of searched) {
+			const bucket = statusBucket(p);
+			if (bucket in counts) counts[bucket]++;
+		}
+
 		const all = document.createElement('button');
 		all.type = 'button';
 		all.className = 'ami-filter__chip' + (selected.size ? '' : ' ami-filter__chip--on');
 		all.dataset.filter = '';
-		all.textContent = `${s.filterAll} (${plots.length})`;
+		all.textContent = `${s.filterAll} (${searched.length})`;
 		filterBar.appendChild(all);
 
 		for (const key of STATUS_FILTERS) {
 			// A bucket nothing falls into is left out rather than shown as a dead
 			// "(0)" chip: on a phone the row is already scrolled, and an empty
 			// bucket is one more thing between the inspector and the one they want.
-			// It cannot hide a ticked chip — ticking requires a non-zero count, and
-			// a bucket that empties while the screen is open would need a save,
-			// which re-renders the picker from a fresh payload anyway.
-			if (!counts[key]) continue;
+			//
+			// A TICKED chip stays, at "(0)". Now that the counts follow the search,
+			// a ticked bucket can empty without the inspector doing anything to the
+			// chips — and dropping it would leave an empty list with its cause off
+			// screen, which reads as the app being broken rather than as a filter
+			// that needs unticking.
+			if (!counts[key] && !selected.has(key)) continue;
 			const chip = document.createElement('button');
 			chip.type = 'button';
 			chip.className = 'ami-filter__chip ami-filter__chip--' + key.replace(/_/g, '-')
@@ -201,7 +288,7 @@ export async function render({ roundId }, { mount, navigate }) {
 
 		const shown = visiblePlots();
 		if (!shown.length) {
-			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(s.filterEmpty)}</div>`;
+			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(emptyMessage())}</div>`;
 			return;
 		}
 
@@ -240,7 +327,7 @@ export async function render({ roundId }, { mount, navigate }) {
 
 		const shown = visiblePlots();
 		if (plots.length && !shown.length) {
-			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(s.filterEmpty)}</div>`;
+			viewport.innerHTML = `<div class="ami-empty">${escapeHtml(emptyMessage())}</div>`;
 			return;
 		}
 
@@ -257,6 +344,12 @@ export async function render({ roundId }, { mount, navigate }) {
 				tile: (data.map || {}).tile,
 				navigate,
 				strings: s,
+				// With a search active the map opens on the lowest-numbered
+				// match rather than fitting the whole set: search "Lovelace"
+				// and it lands on B15, where they start walking. `shown` is in
+				// server order, which IS plot-number order, so "first" is
+				// "lowest" without sorting anything here.
+				focus: firstMatch(shown, searchQuery),
 			});
 		} catch (err) {
 			if (token === mapToken) {
@@ -284,6 +377,21 @@ export async function render({ roundId }, { mount, navigate }) {
 		currentView = btn.dataset.view;
 		(currentView === 'map' ? renderMap : renderList)();
 	});
+
+	/**
+	 * Why the list is empty — the search, the chips, or both. "No plots match
+	 * that filter" while the inspector is staring at a plot number they typed
+	 * sends them looking for the wrong thing.
+	 */
+	function emptyMessage() {
+		if (searchQuery && selected.size) return s.searchFilterEmpty;
+		// Function replacement, not a string: `$&` and friends are patterns in a
+		// string replacement, so searching for one would echo "%s" back at the
+		// inspector instead of what they typed.
+		const term = searchInput.value.trim();
+		if (searchQuery) return s.searchEmpty.replace('%s', () => term);
+		return s.filterEmpty;
+	}
 
 	// Open the remembered tab (default List). initialView was derived from
 	// lastView[round.id] above, and the tab-click handler is its only writer.
