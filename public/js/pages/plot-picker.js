@@ -147,6 +147,13 @@ export async function render({ roundId }, { mount, navigate }) {
 
 	let searchTimer = null;
 	function applySearch(raw) {
+		// The debounce can outlive the screen: tap a plot within 250ms of the
+		// last keystroke and this fires after the router has replaced the
+		// mount. Rendering into the detached viewport is invisible, but on the
+		// Map tab it would also build a Leaflet instance with no live handle
+		// to destroy it. The input is our proof the picker is still mounted.
+		if (!searchInput.isConnected) return;
+
 		const next = normaliseQuery(raw);
 		if (next === searchQuery) return; // e.g. trailing space typed
 		searchQuery = next;
@@ -378,7 +385,11 @@ export async function render({ roundId }, { mount, navigate }) {
 	 */
 	function emptyMessage() {
 		if (searchQuery && selected.size) return s.searchFilterEmpty;
-		if (searchQuery) return s.searchEmpty.replace('%s', searchInput.value.trim());
+		// Function replacement, not a string: `$&` and friends are patterns in a
+		// string replacement, so searching for one would echo "%s" back at the
+		// inspector instead of what they typed.
+		const term = searchInput.value.trim();
+		if (searchQuery) return s.searchEmpty.replace('%s', () => term);
 		return s.filterEmpty;
 	}
 
